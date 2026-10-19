@@ -14,6 +14,8 @@ from transcript_store import (
     StoreConfig,
     TranscriptStore,
     format_timestamp,
+    list_models,
+    merge_segments,
     parse_timestamp,
     render_markdown,
 )
@@ -222,6 +224,7 @@ async def test_finalize_writes_json_and_markdown_and_calls_hook(fake_s3):
             {"identity": "u1", "name": "Иван Петров"},
             {"identity": "u2", "name": "Мария Соколова"},
         ],
+        "models": [],  # an older ASR service reports no model
         "segments": [
             {
                 "identity": "u1",
@@ -277,6 +280,7 @@ async def test_finalize_writes_json_and_markdown_and_calls_hook(fake_s3):
                 {"identity": "u2", "name": "Мария Соколова"},
             ],
             "segments_count": 3,
+            "models": [],
             "files": {"json": json_key, "md": md_key},
             "error": None,
         }
@@ -345,6 +349,7 @@ async def test_failure_posts_status_failed(fake_s3):
     assert payload["room_id"] == "room-uuid"
     assert payload["files"] == {"json": None, "md": None}
     assert payload["segments_count"] == 1
+    assert payload["models"] == []
     assert "ClientError" in payload["error"]
 
 
@@ -473,3 +478,137 @@ async def test_resume_reads_every_page(page_size):
 
     assert [s.text for s in reader.segments] == ["0", "1", "2", "3", "4"]
     await writer.finalize()
+
+
+V3 = ("gigaam-v3", "Русский — GigaAM v3")
+PARAKEET = ("parakeet-v3", "Русский и английский — Parakeet v3")
+
+
+async def test_recognition_models_in_the_final_files_and_hook(fake_s3):
+    """Each segment keeps its model; the models used are listed once, in order."""
+    hook = RecordingHook()
+    store = make_store(fake_s3, hook=make_hook(hook))
+    await store.open()
+    for start, (model, label), text in [
+        (T0 + 9, V3, "три"),
+        (T0 + 1, PARAKEET, "раз"),
+        (T0 + 5, V3, "два"),
+        (T0 + 12, (None, None), "без модели"),
+    ]:
+        store.add_segment(
+            identity="u1",
+            name="Иван",
+            start=start,
+            end=start + 1,
+            text=text,
+            model=model,
+            model_label=label,
+        )
+
+    assert await store.finalize()
+
+    document = fake_s3.json(f"transcriptions/{TID}/transcript.json")
+    assert document["models"] == [
+        {"id": "parakeet-v3", "label": "Русский и английский — Parakeet v3"},
+        {"id": "gigaam-v3", "label": "Русский — GigaAM v3"},
+    ]
+    assert [(s["text"], s.get("model")) for s in document["segments"]] == [
+        ("раз", "parakeet-v3"),
+        ("два", "gigaam-v3"),
+        ("три", "gigaam-v3"),
+        ("без модели", None),
+    ]
+    assert "model_label" not in document["segments"][0]
+    assert "model" not in document["segments"][3]
+    markdown = fake_s3.text(f"transcriptions/{TID}/transcript.md")
+    assert markdown.splitlines()[2:5] == [
+        "- Дата: 19.10.2026, 13:00–13:00 (Europe/Moscow)",
+        "- Участники: Иван",
+        (
+            "- Модель распознавания: Русский и английский — Parakeet v3, "
+            "Русский — GigaAM v3"
+        ),
+    ]
+    (payload,) = hook.payloads
+    assert payload["models"] == ["parakeet-v3", "gigaam-v3"]
+
+
+async def test_model_labels_survive_a_restart(fake_s3):
+    """The parts keep the model labels, so a resumed job still lists them."""
+    previous = make_store(fake_s3)
+    await previous.open()
+    previous.add_segment(
+        identity="u1",
+        name="Иван",
+        start=T0 + 1,
+        end=T0 + 2,
+        text="раз",
+        model=V3[0],
+        model_label=V3[1],
+    )
+    await previous.flush()
+    (key,) = fake_s3.keys(f"transcriptions/{TID}/parts/")
+    assert fake_s3.json(key)[0]["model"] == "gigaam-v3"
+    assert fake_s3.json(key)[0]["model_label"] == "Русский — GigaAM v3"
+    restarted = make_store(fake_s3, clock=Clock(T0 + 10))
+    await restarted.open()
+    restarted.add_segment(
+        identity="u1", name="Иван", start=T0 + 11, end=T0 + 12, text="два", model="x"
+    )
+
+    assert await restarted.finalize()
+
+    document = fake_s3.json(f"transcriptions/{TID}/transcript.json")
+    # without a label (none answered), the id is shown
+    assert document["models"] == [
+        {"id": "gigaam-v3", "label": "Русский — GigaAM v3"},
+        {"id": "x", "label": "x"},
+    ]
+    assert [s["text"] for s in document["segments"]] == ["раз", "два"]
+
+
+def test_label_is_not_part_of_the_segment_identity():
+    """The same phrase read with and without its label is one segment."""
+    with_label = Segment("u1", "Иван", 1000, 2000, "раз", "gigaam-v3", "GigaAM v3")
+    without_label = Segment("u1", "Иван", 1000, 2000, "раз", "gigaam-v3")
+    other_model = Segment("u1", "Иван", 1000, 2000, "раз", "parakeet-v3")
+
+    assert merge_segments([with_label, without_label]) == [with_label]
+    assert len(merge_segments([with_label, other_model])) == 2
+    assert Segment.from_json(with_label.to_part_json()).model_label == "GigaAM v3"
+    assert Segment.from_json(with_label.to_json()) == with_label
+    old_part = {"identity": "u1", "start": "2026-10-19T10:00:00Z"}
+    old_part.update(end="2026-10-19T10:00:01Z", text="раз")
+    assert Segment.from_json(old_part).model is None
+
+
+def test_list_models_takes_the_first_known_label():
+    """Distinct models in order of first phrase; a later label fills a gap."""
+    segments = [
+        Segment("u1", "a", 1, 2, "раз", "gigaam-v3"),
+        Segment("u2", "b", 2, 3, "два", "parakeet-v3", "Parakeet v3"),
+        Segment("u1", "a", 3, 4, "три", "gigaam-v3", "GigaAM v3"),
+        Segment("u1", "a", 4, 5, "четыре", "gigaam-v3", "другое"),
+        Segment("u1", "a", 5, 6, "пять"),
+    ]
+
+    assert list_models(segments) == [
+        {"id": "gigaam-v3", "label": "GigaAM v3"},
+        {"id": "parakeet-v3", "label": "Parakeet v3"},
+    ]
+    assert list_models([]) == []
+
+
+def test_markdown_lists_the_models():
+    """The header line lists the labels, escaped like the names."""
+    markdown = render_markdown(
+        room_name="Планёрка",
+        started_ms=round(T0 * 1000),
+        ended_ms=round(T0 * 1000) + 60_000,
+        participants=[],
+        segments=[],
+        timezone="UTC",
+        models=[{"id": "a", "label": "A*\n  B"}, {"id": "c", "label": "C"}],
+    )
+
+    assert markdown.endswith("- Участники: —\n- Модель распознавания: A\\* B, C\n")

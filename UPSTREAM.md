@@ -11,7 +11,7 @@
 | Путь | Что это |
 |---|---|
 | `asr/` | сервис распознавания речи GigaAM Multilingual (FastAPI, GPU) |
-| `src/agents/gigaam_stt.py`, `transcript_store.py`, `transcription_control.py`, `transcription_reconciler.py`, `tests/` | STT-провайдер `gigaam`, хранение расшифровки в S3, управление через метаданные комнаты, повторный запуск агента после падения |
+| `src/agents/gigaam_stt.py`, `transcript_store.py`, `transcription_control.py`, `transcription_reconciler.py`, `transcription_settings.py`, `tests/` | STT-провайдер `gigaam`, хранение расшифровки в S3, управление через метаданные комнаты, повторный запуск агента после падения, модель распознавания комнаты |
 | `src/backend/transcripts/` | Django-приложение: старт и остановка расшифровки, список, скачивание, хук агента |
 | `src/mail/mjml/transcript_ready.mjml` | письмо инициатору о готовой расшифровке |
 | `src/frontend/src/features/transcription/` | кнопки «Расшифровка» и «Запись», индикатор, страница «Мои записи и расшифровки» |
@@ -28,7 +28,7 @@
 
 | Файл | Изменение |
 |---|---|
-| `src/agents/multi_user_transcriber.py` | ветка `STT_PROVIDER=gigaam`, приём финальных фраз, управление расшифровкой по метаданным комнаты, устойчивое закрытие сессий |
+| `src/agents/multi_user_transcriber.py` | ветка `STT_PROVIDER=gigaam`, приём финальных фраз, управление расшифровкой по метаданным комнаты, модель распознавания комнаты, устойчивое закрытие сессий |
 | `src/agents/pyproject.toml`, `src/agents/uv.lock` | `tzdata`, `pytest`, `pytest-asyncio` в dev, настройки pytest |
 | `src/backend/meet/settings.py` | приложение `transcripts` и настройки `TRANSCRIPTION_*`; `ru-ru` первым в `LANGUAGES`, `LANGUAGE_CODE = "ru-ru"` (в конфигурации `Test` оставлен `en-us`, потому что тесты upstream проверяют английские тексты) |
 | `src/backend/meet/urls.py` | подключение `transcripts.urls` |

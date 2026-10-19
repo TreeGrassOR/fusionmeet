@@ -22,7 +22,7 @@ import logging
 import os
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -83,6 +83,10 @@ def parse_timestamp(value: str) -> int:
     return round(moment.timestamp() * 1000)
 
 
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 @dataclass(frozen=True)
 class Segment:
     """One final phrase of one participant (times in epoch milliseconds)."""
@@ -92,16 +96,30 @@ class Segment:
     start_ms: int
     end_ms: int
     text: str
+    # id of the recognition model (None: unknown, e.g. an older ASR service)
+    model: str | None = None
+    # its display name, a property of the model rather than of the segment
+    model_label: str | None = field(default=None, compare=False)
 
     def to_json(self) -> dict:
         """Serialize the segment as in transcript.json."""
-        return {
+        data = {
             "identity": self.identity,
             "name": self.name,
             "start": format_timestamp(self.start_ms),
             "end": format_timestamp(self.end_ms),
             "text": self.text,
         }
+        if self.model is not None:
+            data["model"] = self.model
+        return data
+
+    def to_part_json(self) -> dict:
+        """Serialize the segment as in the parts (with the model label)."""
+        data = self.to_json()
+        if self.model is not None and self.model_label is not None:
+            data["model_label"] = self.model_label
+        return data
 
     @classmethod
     def from_json(cls, data: dict) -> Segment:
@@ -112,6 +130,8 @@ class Segment:
             start_ms=parse_timestamp(data["start"]),
             end_ms=parse_timestamp(data["end"]),
             text=str(data["text"]),
+            model=_optional_str(data.get("model")),
+            model_label=_optional_str(data.get("model_label")),
         )
 
 
@@ -129,6 +149,15 @@ def list_participants(segments: list[Segment]) -> list[dict]:
         # re-assigning a key keeps its position: the order of first phrase
         names[segment.identity] = segment.name
     return [{"identity": identity, "name": name} for identity, name in names.items()]
+
+
+def list_models(segments: list[Segment]) -> list[dict]:
+    """Recognition models used, in order of first phrase, with their label."""
+    labels: dict[str, str | None] = {}
+    for segment in segments:
+        if segment.model is not None and labels.get(segment.model) is None:
+            labels[segment.model] = segment.model_label
+    return [{"id": model, "label": label or model} for model, label in labels.items()]
 
 
 def _one_line(value: str) -> str:
@@ -155,11 +184,13 @@ def render_markdown(  # noqa: PLR0913
     participants: list[dict],
     segments: list[Segment],
     timezone: str,
+    models: list[dict] | None = None,
 ) -> str:
     """Render the human-readable transcript (in Russian).
 
     Each phrase is a separate line ``[hh:mm:ss] **Name**: text``, where the
     time is the offset of its start from the beginning of the transcription.
+    The recognition models (``list_models``) are listed in the header.
     """
     zone, zone_name = _zone(timezone)
     start = datetime.fromtimestamp(started_ms / 1000, tz=zone)
@@ -176,6 +207,9 @@ def render_markdown(  # noqa: PLR0913
         f"- Дата: {date} ({zone_name})",
         f"- Участники: {names}",
     ]
+    if models:
+        labels = ", ".join(_markdown_name(m["label"]) for m in models)
+        lines.append(f"- Модель распознавания: {labels}")
     for segment in segments:
         offset = max(0, segment.start_ms - started_ms) // 1000
         hours, rest = divmod(offset, 3600)
@@ -372,10 +406,22 @@ class TranscriptStore:
             return False
         return self.stop_at is None or start <= self.stop_at
 
-    def add_segment(
-        self, *, identity: str, name: str, start: float, end: float, text: str
+    def add_segment(  # noqa: PLR0913
+        self,
+        *,
+        identity: str,
+        name: str,
+        start: float,
+        end: float,
+        text: str,
+        model: str | None = None,
+        model_label: str | None = None,
     ) -> bool:
-        """Buffer a final phrase (wall-clock times in epoch seconds)."""
+        """Buffer a final phrase (wall-clock times in epoch seconds).
+
+        ``model`` / ``model_label`` are the id and display name of the
+        recognition model, as answered by the ASR service.
+        """
         text = _one_line(text)
         if not text or not self.accepts(start):
             return False
@@ -386,6 +432,8 @@ class TranscriptStore:
             start_ms=start_ms,
             end_ms=max(start_ms, round(end * 1000)),
             text=text,
+            model=_optional_str(model),
+            model_label=_optional_str(model_label),
         )
         self._segments.append(segment)
         self._unflushed.append(segment)
@@ -401,7 +449,7 @@ class TranscriptStore:
                 f"{self.key_prefix}/parts/"
                 f"{round(self._clock() * 1000):013d}-{self._seq:06d}.json"
             )
-            body = json.dumps([s.to_json() for s in batch], ensure_ascii=False)
+            body = json.dumps([s.to_part_json() for s in batch], ensure_ascii=False)
             try:
                 await asyncio.to_thread(
                     self._s3.put_object,
@@ -500,6 +548,7 @@ class TranscriptStore:
             error = f"{type(exc).__name__}: {exc}"
 
         participants = list_participants(segments)
+        models = list_models(segments)
         status = "failed" if error else "ready"
         logger.info(
             "transcript %s %s: %d segments, %d participants",
@@ -518,6 +567,7 @@ class TranscriptStore:
                     "ended_at": format_timestamp(ended_ms),
                     "participants": participants,
                     "segments_count": len(segments),
+                    "models": [m["id"] for m in models],
                     "files": files,
                     "error": error,
                 }
@@ -527,6 +577,7 @@ class TranscriptStore:
     def _write_final(self, segments: list[Segment], ended_ms: int) -> dict:
         """Write transcript.json and transcript.md (blocking)."""
         participants = list_participants(segments)
+        models = list_models(segments)
         document = {
             "version": FORMAT_VERSION,
             "transcript_id": self.transcript_id,
@@ -535,6 +586,7 @@ class TranscriptStore:
             "started_at": format_timestamp(self.started_at_ms),
             "ended_at": format_timestamp(ended_ms),
             "participants": participants,
+            "models": models,
             "segments": [s.to_json() for s in segments],
         }
         markdown = render_markdown(
@@ -544,6 +596,7 @@ class TranscriptStore:
             participants=participants,
             segments=segments,
             timezone=self._config.timezone,
+            models=models,
         )
         json_key = f"{self.key_prefix}/transcript.json"
         md_key = f"{self.key_prefix}/transcript.md"

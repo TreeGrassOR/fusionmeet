@@ -523,3 +523,150 @@ def test_settings_from_environment(monkeypatch, fake_vad):
     assert gigaam_stt.STT(vad=fake_vad)._opts.unavailable_retry_s == 60
     assert engine.provider == "gigaam"
     assert engine.capabilities.streaming
+
+
+class Resolver:
+    """Model of the room, changed by the test between phrases."""
+
+    def __init__(self, *models):
+        """Resolve to ``models`` in order, then to the last one."""
+        self.models = list(models)
+        self.calls = 0
+
+    async def __call__(self) -> str | None:
+        """Model id, None for the ASR default model."""
+        self.calls += 1
+        return self.models.pop(0) if len(self.models) > 1 else self.models[0]
+
+
+GIGAAM_V3 = {"model_id": "gigaam-v3", "model_label": "Русский — GigaAM v3"}
+PARAKEET = {
+    "model_id": "parakeet-v3",
+    "model_label": "Русский и английский — Parakeet v3",
+}
+
+
+async def test_requests_the_model_of_the_room(fake_vad):
+    """Each phrase asks for the resolved model; its id and label reach the final."""
+    asr = FakeASR(answers=[{"text": "раз", **PARAKEET}, {"text": "два", **GIGAAM_V3}])
+    resolver = Resolver("parakeet-v3", "gigaam-v3")
+    engine = make_stt(fake_vad, asr, model_resolver=resolver)
+
+    events = await run_stream(engine, TWO_PHRASES)
+
+    assert [r.url.params.get("model") for r in asr.requests] == [
+        "parakeet-v3",
+        "gigaam-v3",
+    ]
+    assert asr.requests[0].url.path == "/v1/transcribe"
+    finals = of_type(events, stt.SpeechEventType.FINAL_TRANSCRIPT)
+    assert [
+        (
+            ev.alternatives[0].metadata["model_id"],
+            ev.alternatives[0].metadata["model_label"],
+        )
+        for ev in finals
+    ] == [
+        ("parakeet-v3", "Русский и английский — Parakeet v3"),
+        ("gigaam-v3", "Русский — GigaAM v3"),
+    ]
+    assert resolver.calls == 2
+
+
+@pytest.mark.parametrize("resolver", [None, Resolver(None)])
+async def test_default_model_sends_no_model_parameter(fake_vad, resolver):
+    """No resolver, or no model chosen for the room: the ASR default model."""
+    asr = FakeASR(default={"text": "привет", **GIGAAM_V3})
+    engine = make_stt(fake_vad, asr, model_resolver=resolver)
+
+    events = await run_stream(engine, ONE_PHRASE)
+
+    (request,) = asr.requests
+    assert "model" not in request.url.params
+    assert str(request.url) == "http://asr.test:8000/v1/transcribe"
+    (final,) = of_type(events, stt.SpeechEventType.FINAL_TRANSCRIPT)
+    assert final.alternatives[0].metadata["model_id"] == "gigaam-v3"
+
+
+async def test_older_asr_service_reports_no_model(fake_vad):
+    """A response without model_id / model_label gives None in the metadata."""
+    engine = make_stt(fake_vad, FakeASR(default={"text": "раз", "model_id": 7}))
+
+    events = await run_stream(engine, ONE_PHRASE)
+
+    (final,) = of_type(events, stt.SpeechEventType.FINAL_TRANSCRIPT)
+    assert final.alternatives[0].metadata["model_id"] is None
+    assert final.alternatives[0].metadata["model_label"] is None
+
+
+async def test_model_is_resolved_again_on_retries(fake_vad, fake_time):
+    """A phrase waiting for the service picks up a model changed meanwhile."""
+    asr = FakeASR(answers=[LOADING, {"text": "раз", **GIGAAM_V3}])
+    engine = make_stt(
+        fake_vad, asr, model_resolver=Resolver("gigaam-multilingual", "gigaam-v3")
+    )
+
+    events = await run_stream(engine, ONE_PHRASE)
+
+    assert [r.url.params["model"] for r in asr.requests] == [
+        "gigaam-multilingual",
+        "gigaam-v3",
+    ]
+    assert len(of_type(events, stt.SpeechEventType.FINAL_TRANSCRIPT)) == 1
+
+
+async def test_rejected_model_falls_back_to_the_default(fake_vad, fake_time, caplog):
+    """400 for the model of the room: the phrase is sent again without it."""
+    rejected = httpx.Response(400, json={"detail": "Unknown model 'whisper'"})
+    asr = FakeASR(
+        answers=[
+            rejected,
+            {"text": "раз", **GIGAAM_V3},
+            rejected,
+            {"text": "два", **GIGAAM_V3},
+        ]
+    )
+    engine = make_stt(fake_vad, asr, model_resolver=Resolver("whisper"))
+
+    with caplog.at_level(logging.WARNING, logger="gigaam-stt"):
+        events = await run_stream(engine, TWO_PHRASES)
+
+    assert [r.url.params.get("model") for r in asr.requests] == [
+        "whisper",
+        None,
+        "whisper",
+        None,
+    ]
+    finals = of_type(events, stt.SpeechEventType.FINAL_TRANSCRIPT)
+    assert [ev.alternatives[0].text for ev in finals] == ["раз", "два"]
+    assert {ev.alternatives[0].metadata["model_id"] for ev in finals} == {"gigaam-v3"}
+    assert fake_time.sleeps == []  # sent again at once
+    warnings = [r.getMessage() for r in caplog.records if r.name == "gigaam-stt"]
+    assert len(warnings) == 1  # once per model
+    assert "rejected the model whisper" in warnings[0]
+
+
+async def test_bad_request_without_model_is_not_retried(fake_vad):
+    """A 400 for the default model (e.g. undecodable audio) drops the phrase."""
+    asr = FakeASR(answers=[httpx.Response(400, json={"detail": "bad audio"})])
+    engine = make_stt(fake_vad, asr, model_resolver=Resolver(None))
+
+    events = await run_stream(engine, ONE_PHRASE)
+
+    assert of_type(events, stt.SpeechEventType.FINAL_TRANSCRIPT) == []
+    assert len(asr.requests) == 1
+
+
+async def test_failing_resolver_uses_the_default_model(fake_vad):
+    """A broken resolver never drops the phrase."""
+
+    async def broken() -> str | None:
+        raise RuntimeError("bug")
+
+    asr = FakeASR()
+    engine = make_stt(fake_vad, asr, model_resolver=broken)
+
+    events = await run_stream(engine, ONE_PHRASE)
+
+    assert "model" not in asr.requests[0].url.params
+    assert len(of_type(events, stt.SpeechEventType.FINAL_TRANSCRIPT)) == 1

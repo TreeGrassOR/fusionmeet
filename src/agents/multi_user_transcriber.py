@@ -40,6 +40,7 @@ from tasks import done_callback
 from transcript_store import StoreConfig
 from transcription_control import TranscriptionController
 from transcription_reconciler import TranscriptionReconciler
+from transcription_settings import RoomSettings
 
 load_dotenv()
 
@@ -59,7 +60,10 @@ GIGAAM_SESSION_CLOSE_TIMEOUT_S = float(
 )
 
 
-def create_stt_provider(vad: silero.VAD | None = None):
+def create_stt_provider(
+    vad: silero.VAD | None = None,
+    model_resolver: gigaam_stt.ModelResolver | None = None,
+):
     """Create STT provider based on environment configuration.
 
     Args:
@@ -67,6 +71,7 @@ def create_stt_provider(vad: silero.VAD | None = None):
             voxtral-vllm (no server-side endpointing): if omitted, the plugin
             loads its own Silero model synchronously on the event loop, once
             per participant, freezing all active sessions for the duration.
+        model_resolver: Recognition model chosen for the room (gigaam only).
     """
     if STT_PROVIDER == "deepgram":
         # Note: Not all Deepgram API parameters are supported by the LiveKit plugin
@@ -85,7 +90,7 @@ def create_stt_provider(vad: silero.VAD | None = None):
         # The plugin resolves the ASR service settings from the environment.
         if vad is None:
             raise ValueError("STT_PROVIDER=gigaam requires ENABLE_SILERO_VAD=true")
-        _stt_instance = gigaam_stt.STT(vad=vad)
+        _stt_instance = gigaam_stt.STT(vad=vad, model_resolver=model_resolver)
     else:
         raise ValueError(f"Unknown STT_PROVIDER: {STT_PROVIDER}")
 
@@ -100,7 +105,8 @@ class Transcriber(Agent):
         *,
         participant_identity: str,
         vad: silero.VAD | None = None,
-        on_final: Callable[[str, float, float], None] | None = None,
+        on_final: Callable[..., None] | None = None,
+        model_resolver: gigaam_stt.ModelResolver | None = None,
     ):
         """Init transcription agent.
 
@@ -108,9 +114,11 @@ class Transcriber(Agent):
             participant_identity: Identity of the transcribed participant.
             vad: Shared, prewarmed VAD instance.
             on_final: Called with (text, wall-clock start, wall-clock end in
-                epoch seconds) for every final transcript.
+                epoch seconds) and the keywords ``model`` / ``model_label``
+                (recognition model, if known) for every final transcript.
+            model_resolver: Recognition model chosen for the room.
         """
-        stt = create_stt_provider(vad=vad)
+        stt = create_stt_provider(vad=vad, model_resolver=model_resolver)
 
         super().__init__(
             instructions="not-needed",
@@ -139,7 +147,13 @@ class Transcriber(Agent):
             end = float(metadata.get("wall_end", time.time()))
             duration = max(0.0, alternative.end_time - alternative.start_time)
             start = float(metadata.get("wall_start", end - duration))
-            self._on_final(text, start, end)
+            self._on_final(
+                text,
+                start,
+                end,
+                model=metadata.get("model_id"),
+                model_label=metadata.get("model_label"),
+            )
         except Exception:
             logger.exception(
                 "failed to record a final transcript of %s", self.participant_identity
@@ -162,6 +176,12 @@ class MultiUserTranscriber:
                 config=config,
                 wait_pending=gigaam_stt.wait_idle if STT_PROVIDER == "gigaam" else None,
             )
+        # recognition model chosen for the room, read from the backend
+        self._room_settings = (
+            RoomSettings.from_env(ctx.job.room.name)
+            if STT_PROVIDER == "gigaam"
+            else None
+        )
 
     def start(self):
         """Start listening for participant connection events."""
@@ -202,9 +222,18 @@ class MultiUserTranscriber:
                     self._transcription.on_room_metadata_changed,
                 )
                 await self._transcription.aclose()
+            if self._room_settings is not None:
+                await self._room_settings.aclose()
 
-    def _on_final_transcript(
-        self, participant: rtc.RemoteParticipant, text: str, start: float, end: float
+    def _on_final_transcript(  # noqa: PLR0913
+        self,
+        participant: rtc.RemoteParticipant,
+        text: str,
+        start: float,
+        end: float,
+        *,
+        model: str | None = None,
+        model_label: str | None = None,
     ) -> None:
         if self._transcription is not None:
             self._transcription.add_final(
@@ -214,6 +243,8 @@ class MultiUserTranscriber:
                 start=start,
                 end=end,
                 text=text,
+                model=model,
+                model_label=model_label,
             )
 
     def on_participant_connected(self, participant: rtc.RemoteParticipant):
@@ -291,6 +322,9 @@ class MultiUserTranscriber:
                     participant_identity=participant.identity,
                     vad=vad,
                     on_final=functools.partial(self._on_final_transcript, participant),
+                    model_resolver=(
+                        self._room_settings.asr_model if self._room_settings else None
+                    ),
                 )
             )
         except BaseException:

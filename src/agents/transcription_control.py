@@ -263,6 +263,7 @@ class TranscriptionController:
                 "ended_at": format_timestamp(now_ms),
                 "participants": [],
                 "segments_count": 0,
+                "models": [],
                 "files": {"json": None, "md": None},
                 "error": f"{type(exc).__name__}: {exc}",
             }
@@ -278,8 +279,16 @@ class TranscriptionController:
         finally:
             self._finalizing.pop(store.transcript_id, None)
 
-    def add_final(
-        self, *, identity: str, name: str, start: float, end: float, text: str
+    def add_final(  # noqa: PLR0913
+        self,
+        *,
+        identity: str,
+        name: str,
+        start: float,
+        end: float,
+        text: str,
+        model: str | None = None,
+        model_label: str | None = None,
     ) -> None:
         """Add a final phrase (epoch seconds) to the stores that accept it."""
         stores = list(self._finalizing.values())
@@ -287,7 +296,13 @@ class TranscriptionController:
             stores.append(self._current)
         for store in stores:
             store.add_segment(
-                identity=identity, name=name, start=start, end=end, text=text
+                identity=identity,
+                name=name,
+                start=start,
+                end=end,
+                text=text,
+                model=model,
+                model_label=model_label,
             )
 
     async def aclose(self) -> None:

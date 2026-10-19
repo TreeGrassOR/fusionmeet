@@ -108,7 +108,9 @@ class Harness:
     async def settle(self):
         """Wait for the background tasks (finalizations)."""
         while self.controller._tasks:
-            await next(iter(self.controller._tasks))
+            # awaiting a done task does not yield, so the callback discarding
+            # it would never run (busy loop); gather always yields
+            await asyncio.gather(*list(self.controller._tasks))
 
     def statuses(self) -> dict[str, str]:
         """Hook status by transcript id."""

@@ -47,6 +47,19 @@ def test_gigaam_provider_requires_the_vad(monkeypatch, fake_vad):
         mut.create_stt_provider(vad=None)
 
 
+async def test_gigaam_provider_asks_for_the_model_of_the_room(monkeypatch, fake_vad):
+    """The resolver of the room model reaches the GigaAM STT."""
+    monkeypatch.setattr(mut, "STT_PROVIDER", "gigaam")
+
+    async def room_model() -> str | None:
+        return "parakeet-v3"
+
+    engine = mut.create_stt_provider(vad=fake_vad, model_resolver=room_model)
+
+    assert engine._model_resolver is room_model
+    assert mut.create_stt_provider(vad=fake_vad)._model_resolver is None
+
+
 class FrameInput(io.AudioInput):
     """Audio input replaying frames (faster than real time)."""
 
@@ -75,7 +88,7 @@ async def test_transcriber_reports_finals_and_keeps_publishing(monkeypatch):
     monkeypatch.setattr(
         mut,
         "create_stt_provider",
-        lambda vad=None: gigaam_stt.STT(
+        lambda vad=None, model_resolver=None: gigaam_stt.STT(
             vad=stt_vad,
             base_url="http://asr.test",
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(asr)),
@@ -86,7 +99,7 @@ async def test_transcriber_reports_finals_and_keeps_publishing(monkeypatch):
     agent = mut.Transcriber(
         participant_identity="u1",
         vad=stt_vad,
-        on_final=lambda text, start, end: reported.append((text, start, end)),
+        on_final=lambda text, start, end, **_: reported.append((text, start, end)),
     )
     session = AgentSession(vad=FakeVAD())
     transcribed = []
@@ -111,10 +124,73 @@ async def test_transcriber_reports_finals_and_keeps_publishing(monkeypatch):
     assert [ev.transcript for ev in transcribed if ev.is_final] == ["привет мир"]
 
 
+async def test_transcriber_reports_the_model_of_each_final(monkeypatch):
+    """The room model is requested; the model that answered is reported."""
+    stt_vad = FakeVAD()
+    requested = []
+
+    def asr(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.params.get("model"))
+        return httpx.Response(
+            200,
+            json={
+                "text": "hello world",
+                "model_id": "parakeet-v3",
+                "model_label": "Русский и английский — Parakeet v3",
+            },
+        )
+
+    async def room_model() -> str | None:
+        return "parakeet-v3"
+
+    monkeypatch.setattr(
+        mut,
+        "create_stt_provider",
+        lambda vad=None, model_resolver=None: gigaam_stt.STT(
+            vad=stt_vad,
+            base_url="http://asr.test",
+            model_resolver=model_resolver,
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(asr)),
+            clock=stt_vad.clock,
+        ),
+    )
+    reported = []
+    agent = mut.Transcriber(
+        participant_identity="u1",
+        vad=stt_vad,
+        on_final=lambda text, start, end, **model: reported.append((text, model)),
+        model_resolver=room_model,
+    )
+    session = AgentSession(vad=FakeVAD())
+    session.input.audio = FrameInput(
+        to_frames(np.concatenate([silence(32), tone(64), silence(32)]))
+    )
+
+    await session.start(agent=agent, record=False)
+    try:
+        for _ in range(500):
+            if reported:
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        await session.aclose()
+
+    assert reported == [
+        (
+            "hello world",
+            {
+                "model": "parakeet-v3",
+                "model_label": "Русский и английский — Parakeet v3",
+            },
+        )
+    ]
+    assert requested == ["parakeet-v3"]
+
+
 async def test_report_final_never_raises():
     """A failing storage callback does not break the STT pipeline."""
 
-    def broken(*_args):
+    def broken(*_args, **_kwargs):
         raise RuntimeError("storage is down")
 
     agent = mut.Transcriber.__new__(mut.Transcriber)
@@ -129,11 +205,12 @@ async def test_report_final_never_raises():
     agent._report_final(event)  # logged, not raised
 
     reported = []
-    agent._on_final = lambda *args: reported.append(args)
+    agent._on_final = lambda *args, **kwargs: reported.append((*args, kwargs))
     agent._report_final(event)
-    ((text, start, end),) = reported
+    ((text, start, end, model),) = reported
     assert text == "раз"
     assert end - start == pytest.approx(1.5)
+    assert model == {"model": None, "model_label": None}
 
 
 class FakeRoom(rtc.EventEmitter):
@@ -250,7 +327,14 @@ async def test_metadata_watcher_opens_and_finalizes(storage_env, fake_s3):
     store = transcriber._transcription.current
     assert store.transcript_id == "t1"
     now = store.opened_at
-    transcriber._on_final_transcript(participant, "раз", now, now + 1)
+    transcriber._on_final_transcript(
+        participant,
+        "раз",
+        now,
+        now + 1,
+        model="gigaam-v3",
+        model_label="Русский — GigaAM v3",
+    )
     participant.name = "Иван Петров"  # renamed during the call
     transcriber._on_final_transcript(participant, "два", now + 2, now + 3)
     room.emit(
@@ -265,6 +349,9 @@ async def test_metadata_watcher_opens_and_finalizes(storage_env, fake_s3):
         ("Иван", "раз"),
         ("Иван Петров", "два"),
     ]
+    assert [s.get("model") for s in document["segments"]] == ["gigaam-v3", None]
+    assert document["models"] == [{"id": "gigaam-v3", "label": "Русский — GigaAM v3"}]
+    assert hook.payloads[0]["models"] == ["gigaam-v3"]
 
 
 async def test_aclose_survives_closed_sessions_and_finalizes(storage_env, fake_s3):
@@ -352,6 +439,69 @@ async def test_session_close_transcript_timeout_for_gigaam_only(
     assert session.closed
 
 
+class StartingSession(FakeAgentSession):
+    """AgentSession stand-in that starts and drains."""
+
+    async def start(self, agent):
+        """Start the agent."""
+        self.agent = agent
+
+    async def drain(self):
+        """Nothing to drain."""
+
+
+class StartingRoomIO(FailingRoomIO):
+    """RoomIO stand-in that starts."""
+
+    async def start(self):
+        """Start."""
+
+
+@pytest.mark.parametrize("provider, enabled", [("gigaam", True), ("deepgram", False)])
+async def test_sessions_use_the_model_of_the_room(
+    storage_env, monkeypatch, provider, enabled
+):
+    """One cache of the room settings per job, given to every session (gigaam)."""
+    monkeypatch.setattr(mut, "STT_PROVIDER", provider)
+    monkeypatch.setattr(mut, "AgentSession", StartingSession)
+    monkeypatch.setattr(mut, "RoomIO", StartingRoomIO)
+    created = []
+    monkeypatch.setattr(mut, "Transcriber", lambda **kwargs: created.append(kwargs))
+    monkeypatch.setenv("TRANSCRIPTION_SETTINGS_URL", "http://backend.test/settings/")
+    ctx = SimpleNamespace(
+        room=FakeRoom(),
+        job=SimpleNamespace(id="AJ_1", room=SimpleNamespace(name="room-uuid")),
+        proc=SimpleNamespace(userdata={"vad": object()}),
+    )
+    transcriber = mut.MultiUserTranscriber(ctx)
+    settings = transcriber._room_settings
+    closed = []
+    if enabled:
+        assert (settings.url, settings.room) == (
+            "http://backend.test/settings/",
+            "room-uuid",
+        )
+
+        async def aclose():
+            closed.append(True)
+
+        monkeypatch.setattr(settings, "aclose", aclose)
+    else:
+        assert settings is None
+    transcriber.start()
+
+    await transcriber._start_session(SimpleNamespace(identity="u1"))
+    await transcriber._start_session(SimpleNamespace(identity="u2"))
+    await transcriber.aclose()
+
+    resolvers = [kwargs["model_resolver"] for kwargs in created]
+    if enabled:
+        assert resolvers == [settings.asr_model] * 2
+        assert closed == [True]
+    else:
+        assert resolvers == [None, None]
+
+
 @pytest.mark.parametrize("value, expected", [(None, 10.0), ("4.5", 4.5)])
 def test_session_close_transcript_timeout_from_env(value, expected):
     """GIGAAM_SESSION_CLOSE_TIMEOUT_S sets the timeout (default 10 s)."""
@@ -411,7 +561,7 @@ async def test_last_phrase_kept_when_a_participant_leaves(
     monkeypatch.setattr(
         mut,
         "create_stt_provider",
-        lambda vad=None: gigaam_stt.STT(
+        lambda vad=None, model_resolver=None: gigaam_stt.STT(
             vad=stt_vad,
             base_url="http://asr.test",
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(slow_asr)),
@@ -422,7 +572,7 @@ async def test_last_phrase_kept_when_a_participant_leaves(
     agent = mut.Transcriber(
         participant_identity="u1",
         vad=stt_vad,
-        on_final=lambda text, start, end: reported.append(text),
+        on_final=lambda text, start, end, **_: reported.append(text),
     )
     session = AgentSession(
         vad=FakeVAD(), session_close_transcript_timeout=close_timeout
@@ -520,7 +670,7 @@ async def test_stop_waits_for_the_phrase_being_spoken(
     monkeypatch.setattr(
         mut,
         "create_stt_provider",
-        lambda vad=None: gigaam_stt.STT(
+        lambda vad=None, model_resolver=None: gigaam_stt.STT(
             vad=stt_vad,
             base_url="http://asr.test",
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(asr)),

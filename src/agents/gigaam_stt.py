@@ -14,8 +14,15 @@ same approach as ``voxtral_vllm_stt``):
   process is bounded by ``GIGAAM_MAX_CONCURRENCY``;
 - each non-empty result is emitted as a FINAL_TRANSCRIPT whose metadata holds
   the wall-clock bounds of the phrase (``wall_start`` / ``wall_end``, epoch
-  seconds). A phrase that still fails after the retries is logged and dropped:
-  the stream, hence the participant session, keeps running;
+  seconds) and the model that recognized it (``model_id`` / ``model_label``,
+  as answered by the ASR service). A phrase that still fails after the
+  retries is logged and dropped: the stream, hence the participant session,
+  keeps running;
+- with a ``model_resolver`` (the model chosen for the room, see
+  ``transcription_settings``) every request asks for that model
+  (``?model=<id>``); without one, or when it resolves to None, the ASR service
+  uses its default model. A model the service rejects (400, e.g. no longer
+  enabled) is replaced by the default model for that phrase;
 - while the ASR service is unavailable (503, e.g. its model is still loading
   after a restart, or connection errors) a phrase is retried with backoff for
   up to ``GIGAAM_UNAVAILABLE_RETRY_S`` seconds; the following phrases wait in
@@ -35,7 +42,7 @@ import time
 import uuid
 import weakref
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 import httpx
@@ -84,6 +91,8 @@ _sleep = asyncio.sleep
 
 # a window is (audio frame, speech probability given by the VAD)
 _Window = tuple[rtc.AudioFrame, float]
+# returns the id of the model to ask for, None for the ASR default model
+ModelResolver = Callable[[], Awaitable[str | None]]
 
 
 @dataclass
@@ -128,6 +137,15 @@ class _Phrase:
         return rtc.combine_audio_frames([frame for frame, _ in self.windows])
 
 
+@dataclass(frozen=True)
+class _Recognition:
+    """Text of a phrase and the model that recognized it."""
+
+    text: str
+    model_id: str | None = None
+    model_label: str | None = None
+
+
 class _Shared:
     """State shared by all the streams of a job process (one per event loop)."""
 
@@ -138,6 +156,8 @@ class _Shared:
         # phrases being spoken, queued or recognized
         self.phrases: set[_Phrase] = set()
         self.changed = asyncio.Event()
+        # models the ASR service rejected (logged once)
+        self.rejected_models: set[str] = set()
 
     def get_client(self) -> httpx.AsyncClient:
         if self.client is None or self.client.is_closed:
@@ -210,6 +230,22 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.split())
 
 
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _recognition(payload: object) -> _Recognition | None:
+    """Text and model of a transcription response, None when it has no text."""
+    text = payload.get("text") if isinstance(payload, dict) else None
+    if not isinstance(text, str):
+        return None
+    return _Recognition(
+        text=_normalize_text(text),
+        model_id=_optional_str(payload.get("model_id")),
+        model_label=_optional_str(payload.get("model_label")),
+    )
+
+
 class STT(stt.STT):
     """Streaming STT cutting phrases with a VAD and sending them to GigaAM."""
 
@@ -223,6 +259,7 @@ class STT(stt.STT):
         max_phrase_s: NotGivenOr[float] = NOT_GIVEN,
         request_timeout_s: NotGivenOr[float] = NOT_GIVEN,
         unavailable_retry_s: NotGivenOr[float] = NOT_GIVEN,
+        model_resolver: ModelResolver | None = None,
         http_client: httpx.AsyncClient | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
@@ -242,6 +279,9 @@ class STT(stt.STT):
             unavailable_retry_s: How long a phrase is retried while the ASR
                 service is unavailable (503, connection errors). Falls back to
                 $GIGAAM_UNAVAILABLE_RETRY_S, default 60.
+            model_resolver: Returns the id of the model to ask for (the model
+                chosen for the room), None for the default model of the ASR
+                service; called before every request.
             http_client: Optional HTTP client (tests); by default a client is
                 shared by all the streams of the job process.
             clock: Wall-clock source in epoch seconds (tests).
@@ -256,6 +296,7 @@ class STT(stt.STT):
         self._vad = vad
         self._http_client = http_client
         self._clock = clock
+        self._model_resolver = model_resolver
 
         resolved_max_phrase = (
             max_phrase_s
@@ -330,6 +371,7 @@ class SpeechStream(stt.RecognizeStream):
         self._vad = stt._vad
         self._http_client = stt._http_client
         self._clock = stt._clock
+        self._model_resolver = stt._model_resolver
         self._language = language
         self._shared: _Shared | None = None
         self._preroll: deque[_Window] = deque()
@@ -552,9 +594,10 @@ class SpeechStream(stt.RecognizeStream):
         """Transcribe a phrase; True when its final transcript was emitted."""
         audio = phrase.audio()
         request_id = uuid.uuid4().hex
-        text = await self._transcribe(audio.to_wav_bytes(), request_id)
-        if text is None:
+        result = await self._transcribe(audio.to_wav_bytes(), request_id)
+        if result is None:
             return False
+        text = result.text
         wall_end = phrase.wall_end if phrase.wall_end is not None else self._clock()
         if text:
             start = self.start_time_offset + phrase.wall_start - self.start_time
@@ -573,6 +616,8 @@ class SpeechStream(stt.RecognizeStream):
                             metadata={
                                 "wall_start": phrase.wall_start,
                                 "wall_end": wall_end,
+                                "model_id": result.model_id,
+                                "model_label": result.model_label,
                             },
                         )
                     ],
@@ -587,18 +632,45 @@ class SpeechStream(stt.RecognizeStream):
         )
         return bool(text)
 
-    async def _transcribe(self, wav: bytes, request_id: str) -> str | None:
-        """POST one phrase; return its text, or None once the retries failed.
+    async def _resolve_model(self) -> str | None:
+        if self._model_resolver is None:
+            return None
+        try:
+            return await self._model_resolver()
+        except Exception:
+            logger.exception("could not resolve the recognition model, using default")
+            return None
 
-        Network errors, 408/429 and 5xx are retried ``max_retry`` times. While
-        the ASR service is unavailable (503, connection errors) the phrase is
-        retried with backoff for up to ``unavailable_retry_s`` seconds.
-        """
-        shared = self._get_shared()
-        client = self._http_client or shared.get_client()
+    def _request_headers(self, request_id: str) -> dict[str, str]:
         headers = {"Content-Type": "audio/wav", "X-Request-Id": request_id}
         if self._opts.api_key:
             headers["Authorization"] = f"Bearer {self._opts.api_key}"
+        return headers
+
+    def _log_rejected_model(self, model: str, response: httpx.Response) -> None:
+        rejected = self._get_shared().rejected_models
+        if model not in rejected:
+            rejected.add(model)
+            logger.warning(
+                "the ASR service rejected the model %s (HTTP %d: %r), "
+                "using its default model",
+                model,
+                response.status_code,
+                response.text[:200],
+            )
+
+    async def _transcribe(self, wav: bytes, request_id: str) -> _Recognition | None:
+        """POST one phrase; return its text and model, None once retries failed.
+
+        Network errors, 408/429 and 5xx are retried ``max_retry`` times. While
+        the ASR service is unavailable (503, connection errors) the phrase is
+        retried with backoff for up to ``unavailable_retry_s`` seconds. The
+        model is resolved again before every attempt; when the service rejects
+        it (400) the phrase is sent again at once for the default model.
+        """
+        shared = self._get_shared()
+        client = self._http_client or shared.get_client()
+        headers = self._request_headers(request_id)
         timeout = httpx.Timeout(
             self._opts.request_timeout_s, connect=self._conn_options.timeout
         )
@@ -606,22 +678,28 @@ class SpeechStream(stt.RecognizeStream):
         started = _monotonic()
         unavailable_delay = UNAVAILABLE_FIRST_DELAY_S
         failures = 0
+        default_model = False  # the model of the room was rejected
         while True:
             retryable = unavailable = False
+            model = None if default_model else await self._resolve_model()
             try:
                 async with shared.semaphore:
                     response = await client.post(
                         f"{self._opts.base_url}{TRANSCRIBE_PATH}",
+                        params={"model": model} if model else None,
                         content=wav,
                         headers=headers,
                         timeout=timeout,
                     )
                 if response.status_code == httpx.codes.OK:
-                    payload = response.json()
-                    text = payload.get("text") if isinstance(payload, dict) else None
-                    if isinstance(text, str):
-                        return _normalize_text(text)
+                    if (result := _recognition(response.json())) is not None:
+                        return result
                     error = f"unexpected response: {response.text[:200]!r}"
+                elif model and response.status_code == httpx.codes.BAD_REQUEST:
+                    # e.g. a model removed from ASR_MODELS since it was chosen
+                    self._log_rejected_model(model, response)
+                    default_model = True
+                    continue
                 else:
                     error = f"HTTP {response.status_code}: {response.text[:200]!r}"
                     unavailable = (
