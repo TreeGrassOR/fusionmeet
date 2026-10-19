@@ -178,7 +178,8 @@ ${FM_GREEN}${FM_BOLD}FusionMeet запущен.${FM_RESET}
   Keycloak (админка):  https://id.$base_domain/admin/
                        логин admin, пароль: KEYCLOAK_ADMIN_PASSWORD в $FM_ENV_FILE
 
-Следующий шаг: создайте пользователей (самостоятельная регистрация выключена):
+Пользователи регистрируются сами по ссылке «Регистрация» на странице входа
+(если KEYCLOAK_REGISTRATION_ALLOWED=true), или их создаёт администратор:
 
   sudo $FM_DEPLOY_DIR/add-user.sh <логин> <email>
 
@@ -239,5 +240,21 @@ if [[ $HN_MODE == nginx ]]; then
   step "HTTPS через nginx сервера"
   hn_after_up "${HOSTS[@]}"
 fi
+step "Регистрация в Keycloak"
+registration=$(env_get "$FM_ENV_FILE" KEYCLOAK_REGISTRATION_ALLOWED)
+registration=${registration:-false}
+[[ $registration == true || $registration == false ]] ||
+  die "KEYCLOAK_REGISTRATION_ALLOWED=$registration в $FM_ENV_FILE: допустимо true или false"
+# The realm JSON is imported only on the first start: apply the setting to the
+# running realm on every run instead.
+# shellcheck disable=SC2016  # expanded by bash inside the container
+kc_admin '"$kcadm" update realms/meet --config "$cfg" -s "registrationAllowed=$1"' "$registration" ||
+  die "не удалось изменить настройку регистрации в Keycloak (см. сообщение выше)"
+if [[ $registration == true ]]; then
+  ok "самостоятельная регистрация включена (ссылка «Регистрация» на странице входа)"
+else
+  ok "самостоятельная регистрация выключена: пользователей создаёт add-user.sh"
+fi
+
 fm_compose ps
 print_summary

@@ -81,3 +81,22 @@ require_docker() {
   docker compose version >/dev/null 2>&1 ||
     die "Не найден docker compose (плагин docker-compose-plugin). Запустите: sudo $FM_DEPLOY_DIR/install.sh"
 }
+
+# kc_admin SCRIPT ARGS...: runs a bash SCRIPT inside the keycloak container with
+# kcadm.sh logged in as the bootstrap admin ("$kcadm" and "$cfg" are set; the
+# admin password comes from the container env, never from a command line).
+kc_admin() {
+  local script=$1
+  shift
+  # shellcheck disable=SC2016  # expanded by bash inside the container
+  local prelude='
+set -euo pipefail
+kcadm=/opt/keycloak/bin/kcadm.sh
+cfg=/tmp/kcadm-$$.config
+trap "rm -f \"$cfg\"" EXIT
+KC_CLI_PASSWORD=$KC_BOOTSTRAP_ADMIN_PASSWORD "$kcadm" config credentials \
+  --config "$cfg" --server http://localhost:8080 --realm master \
+  --user "$KC_BOOTSTRAP_ADMIN_USERNAME" >/dev/null
+'
+  fm_compose exec -T keycloak bash -c "$prelude$script" kc-admin "$@"
+}
