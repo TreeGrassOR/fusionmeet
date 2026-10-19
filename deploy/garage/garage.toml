@@ -1,0 +1,19 @@
+# Garage S3 storage, single node (deploy/compose.yaml).
+# rpc_secret comes from GARAGE_RPC_SECRET; the access key and the bucket are
+# created by "garage server --single-node --default-bucket" from
+# GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY / GARAGE_DEFAULT_BUCKET.
+# Reference: https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+replication_factor = 1
+
+rpc_bind_addr = "127.0.0.1:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# IPv4 on purpose: "[::]" fails when the host kernel has IPv6 disabled
+api_bind_addr = "0.0.0.0:3900"
+# Clients sign their requests for this region (AWS_S3_REGION_NAME=garage)
+s3_region = "garage"

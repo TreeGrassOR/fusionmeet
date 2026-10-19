@@ -1,0 +1,541 @@
+# FusionMeet: the whole service on one server with one NVIDIA GPU.
+#
+# Usage: see deploy/README.md (sudo ./deploy/install.sh, then sudo ./deploy/up.sh).
+# Every value comes from deploy/.env (created by up.sh from .env.example); no secret
+# is written in this file. Images built from this repository: frontend, backend,
+# agents and asr, tagged fusionmeet/<name>:local and built once each
+# (backend-migrate and agents-metadata-collector run the images of backend and
+# agents-transcriber). All other images are pinned to an exact tag.
+#
+# Network layout:
+# - caddy publishes 80/tcp, 443/tcp and 443/udp, gets Let's Encrypt certificates
+#   (HTTP-01) and proxies meet.<BASE_DOMAIN> -> frontend:8083,
+#   id.<BASE_DOMAIN> -> keycloak:8080, livekit.<BASE_DOMAIN> -> LiveKit on the host.
+#   Its network aliases make the three public names resolve to Caddy inside the
+#   compose network, so containers reach them without NAT loopback on the router.
+# - livekit uses the host network (7880/tcp signalling, 7881/tcp ICE-TCP,
+#   7882/udp ICE-UDP) and advertises both PUBLIC_IP and LAN_IP as ICE candidates.
+# - Nothing else is published, except Redis on 127.0.0.1:${REDIS_HOST_PORT} for LiveKit.
+
+name: fusionmeet
+
+# Fail early with a clear message when deploy/.env is incomplete.
+x-required:
+  - ${BASE_DOMAIN:?BASE_DOMAIN is not set in deploy/.env (run deploy/up.sh)}
+  - ${PUBLIC_IP:?PUBLIC_IP is not set in deploy/.env}
+  - ${LAN_IP:?LAN_IP is not set in deploy/.env (run deploy/up.sh, it detects it)}
+  - ${ACME_EMAIL:?ACME_EMAIL is not set in deploy/.env (run deploy/up.sh)}
+  - ${DJANGO_SECRET_KEY:?secrets are missing in deploy/.env (run deploy/up.sh)}
+  - ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing in deploy/.env}
+  - ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is missing in deploy/.env}
+  - ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is missing in deploy/.env}
+  - ${OIDC_RP_CLIENT_SECRET:?OIDC_RP_CLIENT_SECRET is missing in deploy/.env}
+  - ${REDIS_PASSWORD:?REDIS_PASSWORD is missing in deploy/.env}
+  - ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is missing in deploy/.env}
+  - ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is missing in deploy/.env}
+  - ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET is missing in deploy/.env}
+  - ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID is missing in deploy/.env}
+  - ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY is missing in deploy/.env}
+  - ${ASR_API_KEY:?ASR_API_KEY is missing in deploy/.env}
+  - ${TRANSCRIPTION_AGENT_TOKEN:?TRANSCRIPTION_AGENT_TOKEN is missing in deploy/.env}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+# S3 (Garage) settings shared by the backend and the agents.
+x-s3-env: &s3-env
+  AWS_S3_ENDPOINT_URL: http://garage:3900
+  AWS_S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+  AWS_S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+  AWS_S3_REGION_NAME: garage
+  AWS_STORAGE_BUCKET_NAME: meet-media-storage
+
+x-backend-env: &backend-env
+  <<: *s3-env
+  DJANGO_CONFIGURATION: Production
+  DJANGO_SETTINGS_MODULE: meet.settings
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  DJANGO_ALLOWED_HOSTS: meet.${BASE_DOMAIN}
+  DJANGO_CSRF_TRUSTED_ORIGINS: https://meet.${BASE_DOMAIN}
+  # Russian by default. LANGUAGES must contain LANGUAGE_CODE (Django check
+  # translation.E004), so the list is set here too; the other codes stay valid
+  # for users who picked them.
+  DJANGO_LANGUAGE_CODE: ru-ru
+  DJANGO_LANGUAGES: "ru-ru,Russian;en-us,English;fr-fr,French;nl-nl,Dutch;de-de,German;es-es,Spanish"
+  PYTHONPATH: /app
+  # Database and cache
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: meet
+  DB_USER: meet
+  DB_PASSWORD: ${POSTGRES_PASSWORD}
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+  # Media (recordings are downloaded through the frontend nginx, see nginx/meet.conf)
+  MEDIA_BASE_URL: https://meet.${BASE_DOMAIN}
+  # OIDC: realm "meet" of Keycloak (keycloak/meet-realm.json)
+  OIDC_OP_JWKS_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/certs
+  OIDC_OP_AUTHORIZATION_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/auth
+  OIDC_OP_TOKEN_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/token
+  OIDC_OP_USER_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/userinfo
+  OIDC_OP_LOGOUT_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/logout
+  OIDC_RP_CLIENT_ID: meet
+  OIDC_RP_CLIENT_SECRET: ${OIDC_RP_CLIENT_SECRET}
+  OIDC_RP_SIGN_ALGO: RS256
+  OIDC_RP_SCOPES: openid email profile
+  # Keycloak's "profile" scope emits given_name / family_name
+  OIDC_USERINFO_FULLNAME_FIELDS: given_name,family_name
+  OIDC_USERINFO_SHORTNAME_FIELD: given_name
+  OIDC_REDIRECT_ALLOWED_HOSTS: meet.${BASE_DOMAIN}
+  LOGIN_REDIRECT_URL: https://meet.${BASE_DOMAIN}
+  LOGIN_REDIRECT_URL_FAILURE: https://meet.${BASE_DOMAIN}
+  LOGOUT_REDIRECT_URL: https://meet.${BASE_DOMAIN}
+  # LiveKit: one public URL for browsers and for the backend's API calls
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+  LIVEKIT_API_URL: https://livekit.${BASE_DOMAIN}
+  LIVEKIT_FORCE_WSS_PROTOCOL: "True"
+  # Rooms: only users with an account create rooms; guests join public rooms by link
+  ALLOW_UNREGISTERED_ROOMS: "False"
+  RESOURCE_DEFAULT_ACCESS_LEVEL: public
+  # Recording = screen recording (MP4) through LiveKit Egress only. Without the
+  # "transcript" mode the post-call summary/WhisperX path is unreachable.
+  RECORDING_ENABLE: "True"
+  RECORDING_WORKER_CLASSES: '{"screen_recording": "core.recording.worker.services.VideoCompositeEgressService"}'
+  # Only the room owner and administrators (moderators) may record or transcribe
+  RECORDING_AUTHENTICATED_PARTICIPANTS_ENABLED: "False"
+  RECORDING_DOWNLOAD_BASE_URL: https://meet.${BASE_DOMAIN}/recording
+  ANALYTICS_BACKEND_SETTINGS: '{"feature_flags": {"summary-enabled": False}}'
+  # Agents (names must match TRANSCRIBER_AGENT_NAME / METADATA_COLLECTOR_AGENT_NAME)
+  ROOM_SUBTITLE_ENABLED: "True"
+  ROOM_SUBTITLE_AGENT_NAME: multi-user-transcriber
+  METADATA_COLLECTOR_ENABLED: "True"
+  METADATA_COLLECTOR_AGENT_NAME: metadata-collector
+  # Per-participant transcription (backend app "transcripts")
+  TRANSCRIPTION_ENABLED: "True"
+  TRANSCRIPTION_AGENT_NAME: multi-user-transcriber
+  TRANSCRIPTION_AGENT_TOKEN: ${TRANSCRIPTION_AGENT_TOKEN}
+  TRANSCRIPTION_S3_PREFIX: transcriptions
+  TRANSCRIPTION_LANGUAGE: ru
+  TRANSCRIPTION_LIST_URL: https://meet.${BASE_DOMAIN}/my-recordings
+  # Email: Django's console backend unless SMTP_HOST is set in deploy/.env
+  DJANGO_EMAIL_BACKEND: django.core.mail.backends.${EMAIL_BACKEND_KIND:-console}.EmailBackend
+  DJANGO_EMAIL_HOST: ${SMTP_HOST:-}
+  DJANGO_EMAIL_PORT: ${SMTP_PORT:-587}
+  DJANGO_EMAIL_HOST_USER: ${SMTP_USER:-}
+  DJANGO_EMAIL_HOST_PASSWORD: ${SMTP_PASSWORD:-}
+  DJANGO_EMAIL_USE_TLS: ${SMTP_USE_TLS:-true}
+  DJANGO_EMAIL_USE_SSL: ${SMTP_USE_SSL:-false}
+  DJANGO_EMAIL_FROM: ${SMTP_FROM:-noreply@meet.${BASE_DOMAIN}}
+  DJANGO_EMAIL_BRAND_NAME: ${APP_TITLE:-FusionMeet}
+  DJANGO_EMAIL_LOGO_IMG: https://meet.${BASE_DOMAIN}/android-chrome-512x512.png
+  DJANGO_EMAIL_SUPPORT_EMAIL: ${SUPPORT_EMAIL:-${ACME_EMAIL}}
+  DJANGO_EMAIL_DOMAIN: meet.${BASE_DOMAIN}
+  DJANGO_EMAIL_APP_BASE_URL: https://meet.${BASE_DOMAIN}
+
+# Images built here exist only locally: "pull_policy: never" stops compose from
+# first looking for fusionmeet/*:local on Docker Hub (the names are not ours
+# there). Compose builds every image before it starts any container, so a
+# service that only names an image built by another service gets it too.
+x-backend: &backend
+  # built by the "backend" service, also run by "backend-migrate"
+  image: fusionmeet/backend:local
+  pull_policy: never
+  environment: *backend-env
+  logging: *logging
+
+x-agents-env: &agents-env
+  LIVEKIT_URL: ws://host.docker.internal:7880
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+
+x-agents: &agents
+  # built by "agents-transcriber", also run by "agents-metadata-collector"
+  image: fusionmeet/agents:local
+  pull_policy: never
+  restart: unless-stopped
+  extra_hosts:
+    - host.docker.internal:host-gateway
+  depends_on:
+    livekit:
+      condition: service_healthy
+    garage:
+      condition: service_healthy
+  healthcheck:
+    # livekit-agents serves its health check on :8081 in "start" mode
+    test: ["CMD", "python", "-c", "import urllib.request as r; r.build_opener(r.ProxyHandler({})).open('http://127.0.0.1:8081/', timeout=4)"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 60s
+  logging: *logging
+
+services:
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL}
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+      MEET_HOST: meet.${BASE_DOMAIN}
+      KEYCLOAK_HOST: id.${BASE_DOMAIN}
+      LIVEKIT_HOST: livekit.${BASE_DOMAIN}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    networks:
+      default:
+        aliases:
+          - meet.${BASE_DOMAIN}
+          - id.${BASE_DOMAIN}
+          - livekit.${BASE_DOMAIN}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+
+  postgres:
+    image: postgres:16.15-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: meet
+      POSTGRES_DB: meet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # used by postgres/init-keycloak-db.sh on the first start only
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-keycloak-db.sh:/docker-entrypoint-initdb.d/10-init-keycloak-db.sh:ro
+    healthcheck:
+      # TCP on purpose: the temporary server of the first initialisation is socket-only
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "meet", "-d", "meet"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging: *logging
+
+  redis:
+    image: redis:7.2.16-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    ports:
+      # LiveKit runs in the host network and reaches Redis here
+      - "127.0.0.1:${REDIS_HOST_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  # S3 storage (recordings, transcripts, metadata). Garage replaces MinIO, whose
+  # image is no longer published on Docker Hub; upstream's dev stack uses it too.
+  garage:
+    image: dxflrs/garage:v2.4.1
+    restart: unless-stopped
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
+      # Created on the first start, then checked: never change them afterwards
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY_ID}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_ACCESS_KEY}
+      GARAGE_DEFAULT_BUCKET: meet-media-storage
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    logging: *logging
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: https://id.${BASE_DOMAIN}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Placeholders of keycloak/meet-realm.json (imported on the first start only)
+      MEET_HOST: meet.${BASE_DOMAIN}
+      OIDC_RP_CLIENT_SECRET: ${OIDC_RP_CLIENT_SECRET}
+      APP_TITLE: ${APP_TITLE:-FusionMeet}
+    volumes:
+      - ./keycloak/meet-realm.json:/opt/keycloak/data/import/meet-realm.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # No HTTP client in the image: the official bash /dev/tcp recipe
+      test: ["CMD", "bash", "-c", "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/127.0.0.1/9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    logging: *logging
+
+  # One-shot: database migrations before the backend starts
+  backend-migrate:
+    <<: *backend
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  backend:
+    <<: *backend
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: backend-production
+      args:
+        DOCKER_USER: ${DOCKER_USER:-1000}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      garage:
+        condition: service_healthy
+    healthcheck:
+      # /__lbheartbeat__ is exempt from the HTTPS redirect; Host must be allowed
+      test: ["CMD", "python", "-c", "import os, urllib.request as r; q = r.Request('http://127.0.0.1:8000/__lbheartbeat__', headers={'Host': os.environ['DJANGO_ALLOWED_HOSTS'].split(',')[0], 'X-Forwarded-Proto': 'https'}); r.build_opener(r.ProxyHandler({})).open(q, timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    image: fusionmeet/frontend:local
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: src/frontend/Dockerfile
+      target: frontend-production
+      args:
+        DOCKER_USER: ${DOCKER_USER:-1000}
+        VITE_APP_TITLE: ${APP_TITLE:-FusionMeet}
+    restart: unless-stopped
+    volumes:
+      # Router on :8083: SPA (image's nginx on :8080), /api, /admin, /static -> backend,
+      # /media/recordings/ -> Garage after auth_request to the backend
+      - ./nginx/meet.conf:/etc/nginx/conf.d/meet.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      garage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8083/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *logging
+
+  livekit:
+    image: livekit/livekit-server:v1.13.6
+    restart: unless-stopped
+    # Host network: LiveKit binds 7882/udp on LAN_IP and advertises LAN_IP next to
+    # PUBLIC_IP, so LAN browsers and the egress/agents containers do not depend on
+    # NAT loopback of the router.
+    network_mode: host
+    extra_hosts:
+      # Webhooks go to the public URL through Caddy's published 443 on this host
+      - meet.${BASE_DOMAIN}:127.0.0.1
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        redis:
+          address: 127.0.0.1:${REDIS_HOST_PORT:-16379}
+          password: ${REDIS_PASSWORD}
+        webhook:
+          api_key: ${LIVEKIT_API_KEY}
+          urls:
+            - https://meet.${BASE_DOMAIN}/api/v1.0/rooms/webhooks-livekit/
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: false
+          node_ip: ${PUBLIC_IP}
+          advertise_internal_ip: true
+          ips:
+            includes:
+              - ${LAN_IP}/32
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  egress:
+    image: livekit/egress:v1.11.0
+    restart: unless-stopped
+    # SIGTERM lets running recordings finish and upload before the exit
+    stop_grace_period: 10m
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: ${LIVEKIT_API_KEY}
+        api_secret: ${LIVEKIT_API_SECRET}
+        ws_url: ws://host.docker.internal:7880
+        redis:
+          address: redis:6379
+          password: ${REDIS_PASSWORD}
+        health_port: 9090
+        logging:
+          level: info
+        cpu_cost:
+          max_cpu_utilization: 0.9
+          room_composite_cpu_cost: 2.0
+          audio_room_composite_cpu_cost: 0.5
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *logging
+
+  agents-transcriber:
+    <<: *agents
+    build:
+      context: ../src/agents
+      dockerfile: Dockerfile
+      target: production
+      args:
+        DOCKER_USER: ${DOCKER_USER:-1000}
+    command: ["python", "multi_user_transcriber.py", "start"]
+    # Lets the agent finalize an open transcript (flush, merge, hook) on shutdown
+    stop_grace_period: 60s
+    environment:
+      <<: [*agents-env, *s3-env]
+      AWS_S3_SECURE_ACCESS: "False"
+      TRANSCRIBER_AGENT_NAME: multi-user-transcriber
+      STT_PROVIDER: gigaam
+      ENABLE_SILERO_VAD: "true"
+      ASR_BASE_URL: http://asr:8000
+      ASR_API_KEY: ${ASR_API_KEY}
+      GIGAAM_MAX_PHRASE_SECONDS: "20"
+      GIGAAM_REQUEST_TIMEOUT_S: "30"
+      GIGAAM_MAX_CONCURRENCY: "4"
+      TRANSCRIPTION_S3_PREFIX: transcriptions
+      TRANSCRIPTION_LANGUAGE: ru
+      TRANSCRIPT_FLUSH_INTERVAL_S: "5"
+      TRANSCRIPT_FINALIZE_GRACE_S: "5"
+      TRANSCRIPT_TIMEZONE: ${TRANSCRIPT_TIMEZONE:-Europe/Moscow}
+      TRANSCRIPTION_HOOK_URL: https://meet.${BASE_DOMAIN}/api/v1.0/transcripts/agent-hook/
+      TRANSCRIPTION_AGENT_TOKEN: ${TRANSCRIPTION_AGENT_TOKEN}
+
+  agents-metadata-collector:
+    <<: *agents
+    command: ["python", "metadata_collector.py", "start"]
+    environment:
+      <<: [*agents-env, *s3-env]
+      AWS_S3_SECURE_ACCESS: "False"
+      METADATA_COLLECTOR_AGENT_NAME: metadata-collector
+      AWS_S3_OUTPUT_FOLDER: metadata
+
+  # GigaAM speech recognition on the GPU. No published port: reachable only as
+  # http://asr:8000 on the compose network.
+  asr:
+    image: fusionmeet/asr:local
+    pull_policy: never
+    build:
+      context: ../asr
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ASR_API_KEY: ${ASR_API_KEY}
+      ASR_MODEL_ID: ${ASR_MODEL_ID:-ai-sage/GigaAM-Multilingual}
+      ASR_MODEL_REVISION: ${ASR_MODEL_REVISION:-3905cd51c3ed4e88c8edf33f3302969ba480a327}
+      ASR_MODEL_VARIANT: ${ASR_MODEL_VARIANT:-large_ctc}
+      ASR_MODEL_VRAM_GB: ${ASR_MODEL_VRAM_GB:-3.0}
+      ASR_FALLBACK_REVISION: ${ASR_FALLBACK_REVISION:-2f8a57144e6ec3adfd32fe0484d9ea9913305bc8}
+      ASR_FALLBACK_VARIANT: ${ASR_FALLBACK_VARIANT:-ctc}
+      ASR_FALLBACK_VRAM_GB: ${ASR_FALLBACK_VRAM_GB:-1.5}
+      ASR_MAX_VRAM_GB: ${ASR_MAX_VRAM_GB:-4}
+      ASR_DEVICE: cuda
+      ASR_FP16_ENCODER: ${ASR_FP16_ENCODER:-true}
+      ASR_MAX_BATCH_SIZE: ${ASR_MAX_BATCH_SIZE:-8}
+      ASR_BATCH_WAIT_MS: ${ASR_BATCH_WAIT_MS:-20}
+      ASR_MAX_BATCH_AUDIO_SECONDS: ${ASR_MAX_BATCH_AUDIO_SECONDS:-240}
+      ASR_MAX_AUDIO_SECONDS: ${ASR_MAX_AUDIO_SECONDS:-30}
+      ASR_MAX_QUEUE: ${ASR_MAX_QUEUE:-64}
+      ASR_PORT: "8000"
+      ASR_LOG_LEVEL: ${ASR_LOG_LEVEL:-info}
+      HF_HOME: /models
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    volumes:
+      # Hugging Face cache: the weights are downloaded once (about 2.3 GB)
+      - asr-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as r; r.build_opener(r.ProxyHandler({})).open('http://127.0.0.1:8000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # the first start downloads the weights (about 2.3 GB)
+      start_period: 3600s
+    logging: *logging
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  redis-data:
+  garage-meta:
+  garage-data:
+  asr-models:

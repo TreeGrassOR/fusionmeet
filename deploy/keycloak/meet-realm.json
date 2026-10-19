@@ -1,0 +1,46 @@
+{
+  "realm": "meet",
+  "displayName": "${APP_TITLE:FusionMeet}",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "editUsernameAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "verifyEmail": false,
+  "rememberMe": true,
+  "bruteForceProtected": true,
+  "passwordPolicy": "length(8) and notUsername",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["ru", "en"],
+  "defaultLocale": "ru",
+  "clients": [
+    {
+      "clientId": "meet",
+      "name": "${APP_TITLE:FusionMeet}",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${OIDC_RP_CLIENT_SECRET}",
+      "rootUrl": "https://${MEET_HOST}",
+      "baseUrl": "/",
+      "redirectUris": ["https://${MEET_HOST}/*"],
+      "webOrigins": ["https://${MEET_HOST}"],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "frontchannelLogout": true,
+      "fullScopeAllowed": true,
+      "attributes": {
+        "post.logout.redirect.uris": "https://${MEET_HOST}/*",
+        "use.refresh.tokens": "true",
+        "backchannel.logout.session.required": "true"
+      }
+    }
+  ]
+}

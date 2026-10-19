@@ -1,0 +1,24 @@
+# FusionMeet reverse proxy (see deploy/compose.yaml).
+# Certificates: Let's Encrypt, HTTP-01/TLS-ALPN-01 on ports 80/443 of this host.
+# The values come from the caddy service environment (deploy/.env).
+{
+	email {$ACME_EMAIL}
+	acme_ca {$ACME_CA}
+}
+
+# Web interface and API: nginx router inside the frontend container
+# (SPA, /api, /admin, /static -> backend, /media/recordings/ -> Garage).
+{$MEET_HOST} {
+	reverse_proxy frontend:8083
+}
+
+# Keycloak (login pages, OIDC endpoints, admin console)
+{$KEYCLOAK_HOST} {
+	reverse_proxy keycloak:8080
+}
+
+# LiveKit signalling (WebSocket) and server API. LiveKit runs in the host
+# network; the media itself (7881/tcp, 7882/udp) never goes through Caddy.
+{$LIVEKIT_HOST} {
+	reverse_proxy host.docker.internal:7880
+}
