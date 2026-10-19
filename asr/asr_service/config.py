@@ -5,12 +5,21 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-# Branch "large_ctc" (585M parameters) of ai-sage/GigaAM-Multilingual.
-DEFAULT_MODEL_REVISION = "3905cd51c3ed4e88c8edf33f3302969ba480a327"
-# Branch "ctc" (= "main", 221M parameters) of ai-sage/GigaAM-Multilingual.
-DEFAULT_FALLBACK_REVISION = "2f8a57144e6ec3adfd32fe0484d9ea9913305bc8"
+from .registry import DEFAULT_MODEL, DEFAULT_MODELS, MODELS, RECOGNIZERS, vram_variable
+
+# Variables of the single-model service, replaced by ASR_MODELS and the model
+# registry: they are ignored, with a warning at startup.
+REMOVED_VARIABLES = (
+    "ASR_MODEL_ID",
+    "ASR_MODEL_REVISION",
+    "ASR_MODEL_VARIANT",
+    "ASR_MODEL_VRAM_GB",
+    "ASR_FALLBACK_REVISION",
+    "ASR_FALLBACK_VARIANT",
+    "ASR_FALLBACK_VRAM_GB",
+)
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
@@ -21,20 +30,27 @@ class ConfigError(ValueError):
     """Raised when the environment holds an invalid configuration."""
 
 
+def default_cpu_threads() -> int:
+    """Half of the CPUs this process may use, at least one."""
+    try:
+        cpus = len(os.sched_getaffinity(0))
+    except AttributeError:  # not on Linux
+        cpus = os.cpu_count() or 1
+    return max(1, cpus // 2)
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings of the ASR service."""
 
     api_key: str
-    model_id: str = "ai-sage/GigaAM-Multilingual"
-    model_revision: str = DEFAULT_MODEL_REVISION
-    model_variant: str = "large_ctc"
-    model_vram_gb: float = 3.0
-    fallback_revision: str | None = DEFAULT_FALLBACK_REVISION
-    fallback_variant: str = "ctc"
-    fallback_vram_gb: float = 1.5
-    max_vram_gb: float = 4.0
+    models: tuple[str, ...] = DEFAULT_MODELS
+    default_model: str = DEFAULT_MODEL
     device: str = "cuda"
+    max_vram_gb: float = 4.0
+    # VRAM need per recogniser (GiB) that replaces the registry value.
+    vram_gb: Mapping[str, float] = field(default_factory=dict)
+    cpu_threads: int = field(default_factory=default_cpu_threads)
     fp16_encoder: bool = True
     max_batch_size: int = 8
     batch_wait_ms: float = 20.0
@@ -42,6 +58,8 @@ class Settings:
     max_audio_seconds: float = 30.0
     max_queue: int = 64
     log_level: str = "info"
+    # Removed variables found in the environment (logged as ignored).
+    ignored_variables: tuple[str, ...] = ()
 
     @property
     def device_type(self) -> str:
@@ -53,6 +71,13 @@ class Settings:
         """Return the device index ("cuda:1" -> 1), or None when none is given."""
         _, sep, index = self.device.partition(":")
         return int(index) if sep else None
+
+    def model_vram_gb(self, recognizer_key: str) -> float:
+        """GPU memory a recogniser needs: ASR_VRAM_GB_<ID> or the registry value."""
+        backend = RECOGNIZERS[recognizer_key].gpu
+        if backend is None:
+            raise ValueError(f"{recognizer_key} has no GPU backend")
+        return self.vram_gb.get(recognizer_key, backend.vram_gb)
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -71,24 +96,20 @@ class Settings:
                 "send as 'Authorization: Bearer <key>'"
             )
 
+        vram_gb = {}
+        for key, recognizer in RECOGNIZERS.items():
+            if recognizer.gpu is not None:
+                name = vram_variable(key)
+                vram_gb[key] = reader.number(name, recognizer.gpu.vram_gb)
+
         settings = cls(
             api_key=api_key,
-            model_id=reader.string("ASR_MODEL_ID", cls.model_id),
-            model_revision=reader.string("ASR_MODEL_REVISION", cls.model_revision),
-            model_variant=reader.string("ASR_MODEL_VARIANT", cls.model_variant),
-            model_vram_gb=reader.number("ASR_MODEL_VRAM_GB", cls.model_vram_gb),
-            fallback_revision=reader.string(
-                "ASR_FALLBACK_REVISION", DEFAULT_FALLBACK_REVISION, empty_disables=True
-            )
-            or None,
-            fallback_variant=reader.string(
-                "ASR_FALLBACK_VARIANT", cls.fallback_variant
-            ),
-            fallback_vram_gb=reader.number(
-                "ASR_FALLBACK_VRAM_GB", cls.fallback_vram_gb
-            ),
-            max_vram_gb=reader.number("ASR_MAX_VRAM_GB", cls.max_vram_gb),
+            models=reader.names("ASR_MODELS", cls.models),
+            default_model=reader.string("ASR_DEFAULT_MODEL", cls.default_model).lower(),
             device=reader.string("ASR_DEVICE", cls.device).lower(),
+            max_vram_gb=reader.number("ASR_MAX_VRAM_GB", cls.max_vram_gb),
+            vram_gb=vram_gb,
+            cpu_threads=reader.integer("ASR_CPU_THREADS", default_cpu_threads()),
             fp16_encoder=reader.boolean("ASR_FP16_ENCODER", cls.fp16_encoder),
             max_batch_size=reader.integer("ASR_MAX_BATCH_SIZE", cls.max_batch_size),
             batch_wait_ms=reader.number(
@@ -102,6 +123,9 @@ class Settings:
             ),
             max_queue=reader.integer("ASR_MAX_QUEUE", cls.max_queue),
             log_level=reader.string("ASR_LOG_LEVEL", cls.log_level).lower(),
+            ignored_variables=tuple(
+                name for name in REMOVED_VARIABLES if reader.is_set(name)
+            ),
         )
         settings.validate()
         return settings
@@ -120,8 +144,21 @@ class Settings:
             )
         if self.log_level not in _LOG_LEVELS:
             raise ConfigError(f"ASR_LOG_LEVEL must be one of {sorted(_LOG_LEVELS)}")
-        if not self.model_id or not self.model_revision:
-            raise ConfigError("ASR_MODEL_ID and ASR_MODEL_REVISION must not be empty")
+        if not self.models:
+            raise ConfigError("ASR_MODELS must name at least one model")
+        unknown = [model for model in self.models if model not in MODELS]
+        if unknown:
+            raise ConfigError(
+                f"ASR_MODELS: unknown model(s) {', '.join(unknown)}; "
+                f"known models: {', '.join(MODELS)}"
+            )
+        if len(set(self.models)) != len(self.models):
+            raise ConfigError("ASR_MODELS must not name a model twice")
+        if self.default_model not in self.models:
+            raise ConfigError(
+                f"ASR_DEFAULT_MODEL={self.default_model} is not enabled in "
+                f"ASR_MODELS ({', '.join(self.models)})"
+            )
         if self.max_batch_audio_seconds < self.max_audio_seconds:
             raise ConfigError(
                 "ASR_MAX_BATCH_AUDIO_SECONDS must be >= ASR_MAX_AUDIO_SECONDS, "
@@ -142,13 +179,20 @@ class _EnvReader:
         value = value.strip()
         return value or None
 
-    def string(self, name: str, default: str, empty_disables: bool = False) -> str:
+    def is_set(self, name: str) -> bool:
+        return self._raw(name) is not None
+
+    def string(self, name: str, default: str) -> str:
+        value = self._raw(name)
+        # An empty variable means the default, as for the other types.
+        return default if value is None else value
+
+    def names(self, name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+        """Comma-separated list, lowercased; empty items are dropped."""
         value = self._raw(name)
         if value is None:
-            # Like the other types, an empty variable means the default, except for
-            # optional values such as ASR_FALLBACK_REVISION where it means "disabled".
-            return "" if empty_disables and name in self._env else default
-        return value
+            return default
+        return tuple(item.strip().lower() for item in value.split(",") if item.strip())
 
     def boolean(self, name: str, default: bool) -> bool:
         value = self._raw(name)

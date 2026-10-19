@@ -12,17 +12,26 @@ from .conftest import (
     AUTH,
     PCM,
     WAV,
+    FakeBackends,
     FakeEngine,
+    fake_gpu,
     make_settings,
     pcm16,
     running_app,
     tone,
+    wait_loaded,
     wait_ready,
     wait_until,
     wav_custom,
     wav_float32,
     wav_pcm16,
 )
+
+
+def pending(app, model_id: str = "gigaam-v3") -> int:
+    """Clips waiting in the queue of a model."""
+    manager = app.state.asr.manager
+    return manager.pending(manager.models[model_id])
 
 
 @pytest.mark.parametrize(
@@ -57,9 +66,11 @@ async def test_wav_pcm16_transcription(client, engine):
     body = response.json()
     assert body["text"] == "clip 24000"
     assert body["duration"] == 1.5
-    assert body["model"] == "ai-sage/GigaAM-Multilingual"
-    assert body["revision"] == "rev-primary"
-    assert body["variant"] == "large_ctc"
+    assert body["model_id"] == "gigaam-v3"
+    assert body["model_label"] == "Русский — GigaAM v3"
+    assert body["model"] == "ai-sage/GigaAM-v3"
+    assert body["revision"] == "rev-v3"
+    assert body["variant"] == "v3"
     assert isinstance(body["processing_ms"], int)
     np.testing.assert_allclose(engine.received[0], samples, atol=1e-4)
 
@@ -172,12 +183,17 @@ async def test_tiny_audio_returns_empty_text_without_the_model(client, engine, s
     assert engine.calls == []
 
 
+def on_gpu(engine: FakeEngine) -> FakeBackends:
+    """Fake backends with a GPU that holds the default model (``engine``)."""
+    return FakeBackends({"gigaam-v3": engine}, gpu=fake_gpu())
+
+
 async def test_concurrent_requests_are_batched():
-    """Concurrent requests share model calls and each one gets its own text."""
+    """Concurrent requests to a GPU model share model calls; each gets its text."""
     engine = FakeEngine(delay=0.05)
-    settings = make_settings(batch_wait_ms=50, max_batch_size=8)
+    settings = make_settings(device="cuda", batch_wait_ms=50, max_batch_size=8)
     lengths = [SAMPLE_RATE + 1000 * index for index in range(6)]
-    async with running_app(settings, engine) as (_app, client):
+    async with running_app(settings, on_gpu(engine)) as (_app, client):
         await wait_ready(client)
         responses = await asyncio.gather(
             *(
@@ -197,8 +213,8 @@ async def test_concurrent_requests_are_batched():
 async def test_batches_respect_max_batch_size():
     """No model call receives more than ASR_MAX_BATCH_SIZE clips."""
     engine = FakeEngine(delay=0.02)
-    settings = make_settings(batch_wait_ms=30, max_batch_size=3)
-    async with running_app(settings, engine) as (_app, client):
+    settings = make_settings(device="cuda", batch_wait_ms=30, max_batch_size=3)
+    async with running_app(settings, on_gpu(engine)) as (_app, client):
         await wait_ready(client)
         responses = await asyncio.gather(
             *(
@@ -211,22 +227,44 @@ async def test_batches_respect_max_batch_size():
     assert max(len(call) for call in engine.calls) <= 3
 
 
+async def test_cpu_models_take_one_clip_per_call():
+    """On the CPU concurrent requests are queued but never batched."""
+    engine = FakeEngine(delay=0.02)
+    settings = make_settings(batch_wait_ms=50, max_batch_size=8)
+    async with running_app(settings, FakeBackends({"gigaam-v3": engine})) as (
+        _app,
+        client,
+    ):
+        await wait_ready(client)
+        responses = await asyncio.gather(
+            *(
+                client.post("/v1/transcribe", content=pcm16(tone(0.5)), headers=PCM)
+                for _ in range(5)
+            )
+        )
+    assert [r.status_code for r in responses] == [200] * 5
+    assert engine.calls == [[8000]] * 5
+
+
 async def test_queue_full_is_503():
     """When ASR_MAX_QUEUE requests are already waiting, new ones get a 503."""
     gate = threading.Event()
     engine = FakeEngine(gate=gate)
     settings = make_settings(max_queue=1, max_batch_size=1, batch_wait_ms=0)
-    async with running_app(settings, engine) as (app, client):
+    async with running_app(settings, FakeBackends({"gigaam-v3": engine})) as (
+        app,
+        client,
+    ):
         await wait_ready(client)
         body = pcm16(tone(0.5))
         first = asyncio.create_task(
             client.post("/v1/transcribe", content=body, headers=PCM)
         )
-        await wait_until(engine.entered.is_set)  # the first clip is on the "GPU"
+        await wait_until(engine.entered.is_set)  # the first clip is in the model
         second = asyncio.create_task(
             client.post("/v1/transcribe", content=body, headers=PCM)
         )
-        await wait_until(lambda: app.state.asr.batcher.pending == 1)
+        await wait_until(lambda: pending(app) == 1)
 
         rejected = await client.post("/v1/transcribe", content=body, headers=PCM)
         assert rejected.status_code == 503
@@ -247,7 +285,10 @@ async def test_clip_of_a_disconnected_client_is_not_transcribed():
     gate = threading.Event()
     engine = FakeEngine(gate=gate)
     settings = make_settings(max_batch_size=1, batch_wait_ms=0)
-    async with running_app(settings, engine) as (app, client):
+    async with running_app(settings, FakeBackends({"gigaam-v3": engine})) as (
+        app,
+        client,
+    ):
         await wait_ready(client)
         first = asyncio.create_task(
             client.post("/v1/transcribe", content=pcm16(tone(0.5)), headers=PCM)
@@ -288,7 +329,7 @@ async def test_clip_of_a_disconnected_client_is_not_transcribed():
             "server": ("asr", 8000),
         }
         abandoned = asyncio.create_task(app(scope, receive, send))
-        await wait_until(lambda: app.state.asr.batcher.pending == 1)
+        await wait_until(lambda: pending(app) == 1)
         disconnected.set()
         await asyncio.wait_for(abandoned, 5)
 
@@ -306,7 +347,10 @@ async def test_clip_of_a_disconnected_client_is_not_transcribed():
 async def test_model_failure_is_500():
     """An exception in the model fails the request with a 500, not the service."""
     engine = FakeEngine(error=RuntimeError("boom"))
-    async with running_app(make_settings(), engine) as (_app, client):
+    async with running_app(make_settings(), FakeBackends({"gigaam-v3": engine})) as (
+        _app,
+        client,
+    ):
         await wait_ready(client)
         response = await client.post(
             "/v1/transcribe", content=pcm16(tone(1)), headers=PCM
@@ -318,36 +362,69 @@ async def test_model_failure_is_500():
 
 
 async def test_health_goes_from_loading_to_ok():
-    """/health is 503 "loading" until the model is loaded, then 200 with details."""
+    """/health is 503 "loading" until the default model is loaded, then 200."""
     gate = threading.Event()
-    engine = FakeEngine()
-
-    def slow_loader(_settings):
-        gate.wait(5)
-        return engine
-
+    backends = FakeBackends(gates={"gigaam-v3": gate})
     settings = make_settings(max_batch_size=5)
-    async with running_app(settings, slow_loader) as (_app, client):
+    async with running_app(settings, backends) as (app, client):
         loading = await client.get("/health")
         assert loading.status_code == 503
-        assert loading.json() == {"status": "loading"}
+        assert loading.json()["status"] == "loading"
+        assert {m["status"] for m in loading.json()["models"]} == {"loading"}
 
         early = await client.post("/v1/transcribe", content=pcm16(tone(1)), headers=PCM)
         assert early.status_code == 503
-        assert early.json() == {"detail": "The model is still loading"}
+        assert early.json() == {"detail": "Model gigaam-v3 is still loading"}
+        assert early.headers["retry-after"] == "5"
 
         gate.set()
         await wait_ready(client)
+        await wait_loaded(app)
         ready = await client.get("/health")
     assert ready.json() == {
         "status": "ok",
-        "model": "ai-sage/GigaAM-Multilingual",
-        "revision": "rev-primary",
-        "variant": "large_ctc",
-        "device": "cpu",
-        "fp16_encoder": False,
+        "default": "gigaam-v3",
+        "models": [
+            {
+                "id": "gigaam-v3",
+                "status": "ready",
+                "device": "cpu",
+                "model": "repo/gigaam-v3",
+                "revision": "rev-fake",
+                "variant": "gigaam-v3-cpu",
+                "fp16_encoder": False,
+            },
+            {
+                "id": "parakeet-v3",
+                "status": "ready",
+                "device": "cpu",
+                "model": "repo/parakeet-v3",
+                "revision": "rev-fake",
+                "variant": "parakeet-v3-cpu",
+                "fp16_encoder": False,
+            },
+            {
+                "id": "gigaam-multilingual",
+                "status": "ready",
+                "device": "cpu",
+                "model": "repo/gigaam-multilingual",
+                "revision": "rev-fake",
+                "variant": "gigaam-multilingual-cpu",
+                "fp16_encoder": False,
+            },
+            {
+                "id": "gigaam-multilingual-punct",
+                "status": "ready",
+                "device": "cpu",
+                "model": "repo/gigaam-multilingual",
+                "revision": "rev-fake",
+                "variant": "gigaam-multilingual-cpu",
+                "fp16_encoder": False,
+            },
+        ],
         "vram_limit_gb": None,
         "vram_free_gb_at_start": None,
+        "cpu_threads": 2,
         "max_batch_size": 5,
     }
 

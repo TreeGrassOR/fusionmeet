@@ -1,8 +1,9 @@
-"""FastAPI application: ``POST /v1/transcribe`` and ``GET /health``.
+"""FastAPI application: ``POST /v1/transcribe``, ``GET /v1/models``, ``GET /health``.
 
-Run with ``uvicorn asr_service.main:create_app --factory``. The model loads in the
-background after the server starts; ``/health`` answers 503 until it is ready. If it
-cannot be loaded, the error is logged and the process exits with status 1.
+Run with ``uvicorn asr_service.main:create_app --factory``. Every enabled model loads
+in the background after the server starts, the default model first; ``/health``
+answers 503 until the default model is ready. A model that cannot be loaded is
+reported as ``failed`` and the others keep serving.
 """
 
 from __future__ import annotations
@@ -10,13 +11,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import secrets
-import sys
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from collections.abc import AsyncIterator, Awaitable
+from typing import Any, TypeVar
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -24,17 +22,24 @@ from pydantic import BaseModel
 
 from . import __version__
 from .audio import SAMPLE_RATE, AudioError, decode_audio
-from .batcher import BatcherClosedError, MicroBatcher, QueueFullError
+from .batcher import BatcherClosedError, QueueFullError
 from .config import ConfigError, Settings
-from .engine import MIN_SAMPLES, Engine, FatalStartupError, load_engine
+from .engine import MIN_SAMPLES
+from .models import (
+    LOADING,
+    Backends,
+    ModelManager,
+    ModelUnavailableError,
+    RealBackends,
+)
+from .registry import MODELS, ModelSpec
 
 logger = logging.getLogger("asr_service")
 
-EngineLoader = Callable[[Settings], Engine]
-FatalHandler = Callable[[int], None]
-
 # Room for a WAV header and its chunks on top of the samples themselves.
 _BODY_OVERHEAD_BYTES = 64 * 1024
+
+T = TypeVar("T")
 
 
 class TranscriptionResponse(BaseModel):
@@ -42,6 +47,8 @@ class TranscriptionResponse(BaseModel):
 
     text: str
     duration: float
+    model_id: str
+    model_label: str
     model: str
     revision: str
     variant: str
@@ -51,71 +58,25 @@ class TranscriptionResponse(BaseModel):
 class ASRService:
     """Model lifecycle and request handlers; ``create_app`` wires them to routes."""
 
-    def __init__(
-        self, settings: Settings, loader: EngineLoader, on_fatal: FatalHandler
-    ):
-        """Prepare the service; the model is loaded by ``lifespan``."""
+    def __init__(self, settings: Settings, backends: Backends):
+        """Prepare the service; the models are loaded by ``lifespan``."""
         self.settings = settings
-        self.engine: Engine | None = None
-        self.batcher: MicroBatcher | None = None
-        self._loader = loader
-        self._on_fatal = on_fatal
+        self.manager = ModelManager(settings, backends)
         self._max_body_bytes = (
             int(settings.max_audio_seconds * SAMPLE_RATE * 4) + _BODY_OVERHEAD_BYTES
-        )
-        # One thread loads the model and then runs every forward pass.
-        self._executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="asr-model"
         )
 
     @contextlib.asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
-        """Load the model in the background while the server already answers."""
-        loading = asyncio.create_task(self._load_model(), name="asr-load-model")
+        """Load the models in the background while the server already answers."""
+        loading = asyncio.create_task(self.manager.load(), name="asr-load-models")
         try:
             yield
         finally:
             loading.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await loading
-            if self.batcher is not None:
-                await self.batcher.stop()
-            self._executor.shutdown(wait=False, cancel_futures=True)
-
-    async def _load_model(self) -> None:
-        settings = self.settings
-        loop = asyncio.get_running_loop()
-        try:
-            engine = await loop.run_in_executor(self._executor, self._loader, settings)
-        except FatalStartupError as exc:
-            logger.critical("ASR service cannot start: %s", exc)
-            self._on_fatal(1)
-            return
-        except Exception:
-            logger.critical(
-                "ASR service cannot start: model loading failed", exc_info=True
-            )
-            self._on_fatal(1)
-            return
-        batcher = MicroBatcher(
-            engine.transcribe_batch,
-            self._executor,
-            max_batch_size=settings.max_batch_size,
-            max_wait_s=settings.batch_wait_ms / 1000,
-            max_batch_samples=int(settings.max_batch_audio_seconds * SAMPLE_RATE),
-            max_queue=settings.max_queue,
-        )
-        batcher.start()
-        self.engine, self.batcher = engine, batcher
-        info = engine.info
-        logger.info(
-            "ASR service ready: %s variant %s (revision %s) on %s, max batch %d",
-            info.model_id,
-            info.variant,
-            info.revision,
-            info.device,
-            settings.max_batch_size,
-        )
+            await self.manager.stop()
 
     def require_api_key(self, request: Request) -> None:
         """FastAPI dependency: 401 unless ``Authorization: Bearer <ASR_API_KEY>``."""
@@ -130,33 +91,41 @@ class ASRService:
             )
 
     async def health(self) -> Any:
-        """``GET /health``: 503 while loading, then the model description."""
-        engine = self.engine
-        if engine is None or self.batcher is None:
-            return JSONResponse({"status": "loading"}, status_code=503)
-        info = engine.info
-        return {
-            "status": "ok",
-            "model": info.model_id,
-            "revision": info.revision,
-            "variant": info.variant,
-            "device": info.device,
-            "fp16_encoder": info.fp16_encoder,
-            "vram_limit_gb": info.vram_limit_gb,
-            "vram_free_gb_at_start": info.vram_free_gb_at_start,
-            "max_batch_size": self.settings.max_batch_size,
-        }
+        """``GET /health``: 503 until the default model is ready, then 200."""
+        body = self.manager.health()
+        return JSONResponse(body, status_code=200 if body["status"] == "ok" else 503)
 
-    async def transcribe(self, request: Request) -> TranscriptionResponse:
-        """``POST /v1/transcribe``: decode the body and queue it for the model."""
-        started = time.perf_counter()
-        engine, batcher = self.engine, self.batcher
-        if engine is None or batcher is None:
+    async def list_models(self) -> dict[str, Any]:
+        """``GET /v1/models``: the enabled models with their status."""
+        return self.manager.describe()
+
+    def _resolve_model(self, model_id: str | None) -> ModelSpec:
+        """Return the requested model (the default when none is given), or a 400."""
+        model_id = (model_id or "").strip().lower() or self.settings.default_model
+        enabled = ", ".join(self.manager.models)
+        if model_id not in MODELS:
             raise HTTPException(
-                status_code=503,
-                detail="The model is still loading",
-                headers={"Retry-After": "5"},
+                status_code=400,
+                detail=f"Unknown model {model_id!r}; enabled models: {enabled}",
             )
+        if model_id not in self.manager.models:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model {model_id!r} is not enabled on this server; "
+                f"enabled models: {enabled}",
+            )
+        return self.manager.models[model_id]
+
+    async def transcribe(
+        self, request: Request, model: str | None = None
+    ) -> TranscriptionResponse:
+        """``POST /v1/transcribe?model=<id>``: decode the body and queue it."""
+        started = time.perf_counter()
+        spec = self._resolve_model(model)
+        try:
+            self.manager.check_available(spec)
+        except ModelUnavailableError as exc:
+            raise _unavailable(exc) from exc
         max_seconds = self.settings.max_audio_seconds
         body = await _read_body(request, self._max_body_bytes, max_seconds)
         try:
@@ -173,14 +142,19 @@ class ASRService:
             )
 
         text = ""
+        info = self.manager.engine_info(spec)
         if wav.shape[0] >= MIN_SAMPLES:
             try:
-                text = await _unless_disconnected(request, batcher.submit(wav))
+                text, info = await _unless_disconnected(
+                    request, self.manager.transcribe(spec, wav)
+                )
             except ClientDisconnectedError as exc:
                 # The server drops this response (and its access log line).
                 raise HTTPException(
                     status_code=499, detail="Client closed the request"
                 ) from exc
+            except ModelUnavailableError as exc:
+                raise _unavailable(exc) from exc
             except QueueFullError as exc:
                 raise HTTPException(
                     status_code=503, detail=str(exc), headers={"Retry-After": "1"}
@@ -188,42 +162,37 @@ class ASRService:
             except BatcherClosedError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
             except Exception as exc:
-                # Already logged with its traceback by the batcher.
+                # Already logged with its traceback by the batcher or the manager.
                 raise HTTPException(
                     status_code=500, detail="Transcription failed"
                 ) from exc
 
-        info = engine.info
         return TranscriptionResponse(
             text=text,
             duration=round(duration, 3),
-            model=info.model_id,
-            revision=info.revision,
-            variant=info.variant,
+            model_id=spec.id,
+            model_label=spec.label,
+            model="" if info is None else info.model_id,
+            revision="" if info is None else info.revision,
+            variant="" if info is None else info.variant,
             processing_ms=round((time.perf_counter() - started) * 1000),
         )
 
 
-def exit_process(code: int) -> None:
-    """Flush the logs and terminate the process at once (the server cannot run)."""
-    logging.shutdown()
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(code)
+def _unavailable(exc: ModelUnavailableError) -> HTTPException:
+    """503 for a model that is loading (with Retry-After) or failed."""
+    headers = {"Retry-After": "5"} if exc.status == LOADING else None
+    return HTTPException(status_code=503, detail=str(exc), headers=headers)
 
 
 def create_app(
-    settings: Settings | None = None,
-    *,
-    engine_loader: EngineLoader | None = None,
-    on_fatal: FatalHandler | None = None,
+    settings: Settings | None = None, *, backends: Backends | None = None
 ) -> FastAPI:
     """Build the application (uvicorn factory).
 
     Args:
         settings: the settings; read from the environment when omitted.
-        engine_loader: loads the model (injected by tests).
-        on_fatal: called with the exit status when the model cannot be loaded.
+        backends: places and loads the models (injected by tests).
     """
     if settings is None:
         try:
@@ -233,12 +202,21 @@ def create_app(
             logger.critical("Invalid ASR configuration: %s", exc)
             raise SystemExit(1) from exc
     _configure_logging(settings.log_level)
-
-    service = ASRService(
-        settings,
-        engine_loader if engine_loader is not None else load_engine,
-        on_fatal if on_fatal is not None else exit_process,
+    if settings.ignored_variables:
+        logger.warning(
+            "Ignoring %s: the models and their revisions now come from ASR_MODELS "
+            "and the model registry (see asr/README.md)",
+            ", ".join(settings.ignored_variables),
+        )
+    logger.info(
+        "Models: %s (default %s), ASR_DEVICE=%s, %d CPU thread(s) per model",
+        ", ".join(settings.models),
+        settings.default_model,
+        settings.device,
+        settings.cpu_threads,
     )
+
+    service = ASRService(settings, backends if backends is not None else RealBackends())
     app = FastAPI(
         title="FusionMeet ASR",
         version=__version__,
@@ -249,6 +227,12 @@ def create_app(
     )
     app.state.asr = service
     app.add_api_route("/health", service.health, methods=["GET"])
+    app.add_api_route(
+        "/v1/models",
+        service.list_models,
+        methods=["GET"],
+        dependencies=[Depends(service.require_api_key)],
+    )
     app.add_api_route(
         "/v1/transcribe",
         service.transcribe,
@@ -269,7 +253,7 @@ async def _wait_disconnect(request: Request) -> None:
         pass
 
 
-async def _unless_disconnected(request: Request, submission: Awaitable[str]) -> str:
+async def _unless_disconnected(request: Request, submission: Awaitable[T]) -> T:
     """Await ``submission``, cancelling it if the client disconnects first.
 
     Servers do not cancel the handler of a client that went away (an agent that

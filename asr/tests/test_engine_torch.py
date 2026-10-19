@@ -5,9 +5,15 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from asr_service.engine import GIB, EngineInfo, GigaAMEngine, load_engine
+from asr_service.engine import (
+    EngineInfo,
+    GigaAMEngine,
+    limit_gpu_memory,
+    probe_gpu,
+)
+from asr_service.placement import GIB
 
-from .conftest import FakeEngine, make_settings
+from .conftest import make_settings
 
 torch = pytest.importorskip("torch")
 
@@ -79,7 +85,7 @@ def test_empty_batch():
 
 @pytest.mark.parametrize(("device", "index"), [("cuda", 0), ("cuda:1", 1)])
 def test_real_torch_accepts_the_memory_fraction_arguments(monkeypatch, device, index):
-    """The real set_per_process_memory_fraction() takes what load_engine passes.
+    """The real set_per_process_memory_fraction() takes what the service passes.
 
     Only the driver calls are stubbed: torch's own argument checks still run (they
     refuse a device without an index such as "cuda").
@@ -95,9 +101,7 @@ def test_real_torch_accepts_the_memory_fraction_arguments(monkeypatch, device, i
         lambda fraction, idx: calls.append((fraction, idx)),
         raising=False,
     )
-    load_engine(
-        make_settings(device=device),
-        torch_module=torch,
-        build_engine=lambda _s, spec, _p: FakeEngine(variant=spec.variant),
-    )
+    gpu, reason = probe_gpu(torch, make_settings(device=device))
+    assert reason is None
+    limit_gpu_memory(torch, gpu, 4 * GIB)
     assert calls == [(pytest.approx(4 / 24), index)]

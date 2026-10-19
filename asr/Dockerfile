@@ -1,4 +1,5 @@
-# GigaAM Multilingual speech recognition service (see README.md).
+# Speech recognition service with several selectable models (see README.md): torch
+# runs the GigaAM models on the GPU, onnxruntime (CPU build) every model on the CPU.
 #
 # The CUDA user-space libraries come with the torch wheels (nvidia-* packages), so
 # the "base" CUDA image is enough; the NVIDIA Container Toolkit injects the driver.
@@ -52,7 +53,8 @@ VOLUME ["/models"]
 # Reachable on the compose network only: the port is never published.
 EXPOSE 8000
 
-# The first start downloads the weights (2.3 GB for large_ctc): long start period.
+# The first start downloads the weights (about 5 GB for all the models; /health is
+# ready once the default model is): long start period.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=900s --retries=3 \
     CMD ["python", "-c", "import os, urllib.request as r; r.build_opener(r.ProxyHandler({})).open('http://127.0.0.1:%s/health' % os.environ.get('ASR_PORT', '8000'), timeout=4)"]
 

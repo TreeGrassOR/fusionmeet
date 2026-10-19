@@ -33,6 +33,8 @@ filelock==4.2.4
     # via
     #   huggingface-hub
     #   torch
+flatbuffers==25.12.19
+    # via onnxruntime
 fsspec==2026.9.0
     # via
     #   huggingface-hub
@@ -73,6 +75,8 @@ networkx==3.7
 numpy==2.5.4
     # via
     #   -r requirements.in
+    #   onnx-asr
+    #   onnxruntime
     #   pandas
     #   pyannote-core
     #   soundfile
@@ -120,15 +124,22 @@ omegaconf==2.3.1
     # via
     #   -r requirements.in
     #   hydra-core
+onnx-asr==0.12.0
+    # via -r requirements.in
+onnxruntime==1.30.0
+    # via -r requirements.in
 opentelemetry-api==1.45.1
     # via fastapi
 packaging==26.3
     # via
     #   huggingface-hub
     #   hydra-core
+    #   onnxruntime
     #   transformers
 pandas==3.0.6
     # via pyannote-core
+protobuf==7.36.2
+    # via onnxruntime
 pyannote-core==6.1.0
     # via -r requirements.in
 pycparser==3.11
@@ -143,6 +154,7 @@ python-dateutil==2.9.0.post0
     # via pandas
 pyyaml==6.0.3
     # via
+    #   -r requirements.in
     #   huggingface-hub
     #   omegaconf
     #   transformers

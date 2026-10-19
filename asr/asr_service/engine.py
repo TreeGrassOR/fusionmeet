@@ -1,4 +1,4 @@
-"""GigaAM model loading (VRAM budget, fallback variant) and batched inference.
+"""GigaAM on the GPU (torch): CUDA probing, model loading and batched inference.
 
 ``torch`` and ``transformers`` are imported lazily, inside the functions that need
 them, so the HTTP layer and the unit tests run without them.
@@ -7,10 +7,10 @@ them, so the HTTP layer and the unit tests run without them.
 from __future__ import annotations
 
 import gc
-import importlib
 import logging
+import os
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
@@ -18,162 +18,43 @@ import numpy as np
 
 from .audio import SAMPLE_RATE
 from .config import Settings
+from .placement import GIB, GpuInfo
+from .registry import TorchBackend
 
 logger = logging.getLogger(__name__)
 
-GIB = 1024**3
 # Clips shorter than this are answered with "" without running the model: torch.stft
 # fails on fewer than 320 samples, and 0.1 s cannot hold a word anyway.
 MIN_SAMPLES = SAMPLE_RATE // 10
 
 
-class FatalStartupError(RuntimeError):
-    """The model cannot be served with this configuration or hardware."""
+class GpuLoadError(RuntimeError):
+    """A model could not be loaded on the GPU (the memory it took was freed)."""
 
 
-@dataclass(frozen=True)
-class ModelSpec:
-    """One loadable model variant."""
-
-    variant: str
-    revision: str
-    vram_gb: float
-
-
-@dataclass(frozen=True)
-class VramPlan:
-    """Outcome of the VRAM check done before loading on CUDA."""
-
-    candidates: tuple[ModelSpec, ...]
-    free_bytes: int
-    total_bytes: int
-    budget_bytes: int
-
-    @property
-    def memory_fraction(self) -> float:
-        """Fraction passed to ``torch.cuda.set_per_process_memory_fraction``."""
-        return self.budget_bytes / self.total_bytes
+class GpuOutOfMemoryError(GpuLoadError):
+    """CUDA ran out of memory while a model was loading (its memory was freed)."""
 
 
 @dataclass(frozen=True)
 class EngineInfo:
-    """Description of the loaded model, reported by ``/health`` and responses."""
+    """Description of a loaded recogniser, reported by ``/health`` and responses."""
 
     model_id: str
     variant: str
     revision: str
     device: str
-    fp16_encoder: bool
-    vram_limit_gb: float | None = None
-    vram_free_gb_at_start: float | None = None
+    fp16_encoder: bool = False
 
 
 class Engine(Protocol):
-    """What the HTTP layer needs from a loaded model."""
+    """What the HTTP layer needs from a loaded recogniser."""
 
     info: EngineInfo
 
     def transcribe_batch(self, wavs: Sequence[np.ndarray]) -> list[str]:
         """Transcribe mono float32 16 kHz clips; return one text per clip."""
         ...
-
-
-BuildEngine = Callable[[Settings, ModelSpec, VramPlan | None], Engine]
-
-
-def model_specs(settings: Settings) -> tuple[ModelSpec, ModelSpec | None]:
-    """Return the primary and the optional fallback model variants."""
-    primary = ModelSpec(
-        settings.model_variant, settings.model_revision, settings.model_vram_gb
-    )
-    fallback = None
-    if settings.fallback_revision:
-        fallback = ModelSpec(
-            settings.fallback_variant,
-            settings.fallback_revision,
-            settings.fallback_vram_gb,
-        )
-    return primary, fallback
-
-
-def plan_vram(settings: Settings, free_bytes: int, total_bytes: int) -> VramPlan:
-    """Choose which variants to try given the free GPU memory.
-
-    The budget is ``min(ASR_MAX_VRAM_GB, free memory)``. The primary variant is used
-    when its requirement fits in the budget (the fallback is then kept as a plan B for
-    a CUDA out-of-memory error during loading); otherwise the fallback is used.
-
-    Raises:
-        FatalStartupError: when not even the fallback fits.
-    """
-    primary, fallback = model_specs(settings)
-    budget = min(int(settings.max_vram_gb * GIB), int(free_bytes))
-    budget_gb = budget / GIB
-    fallback_fits = fallback is not None and budget_gb >= fallback.vram_gb
-
-    if budget_gb >= primary.vram_gb:
-        candidates = (primary, fallback) if fallback_fits else (primary,)
-        logger.info(
-            "VRAM budget %.2f GiB (free %.2f of %.2f GiB, ASR_MAX_VRAM_GB=%g): "
-            "loading %s, which needs %.2f GiB",
-            budget_gb,
-            free_bytes / GIB,
-            total_bytes / GIB,
-            settings.max_vram_gb,
-            primary.variant,
-            primary.vram_gb,
-        )
-    elif fallback_fits:
-        candidates = (fallback,)
-        logger.warning(
-            "Not enough VRAM for %s: it needs %.2f GiB but the budget is only %.2f GiB "
-            "(free %.2f of %.2f GiB, ASR_MAX_VRAM_GB=%g). Loading the fallback %s "
-            "(revision %s, needs %.2f GiB) instead; recognition quality will be lower",
-            primary.variant,
-            primary.vram_gb,
-            budget_gb,
-            free_bytes / GIB,
-            total_bytes / GIB,
-            settings.max_vram_gb,
-            fallback.variant,
-            fallback.revision,
-            fallback.vram_gb,
-        )
-    else:
-        raise FatalStartupError(
-            _not_enough_vram_message(
-                settings, primary, fallback, free_bytes, total_bytes
-            )
-        )
-    return VramPlan(candidates, int(free_bytes), int(total_bytes), budget)
-
-
-def _not_enough_vram_message(
-    settings: Settings,
-    primary: ModelSpec,
-    fallback: ModelSpec | None,
-    free_bytes: int,
-    total_bytes: int,
-) -> str:
-    smallest = fallback if fallback is not None else primary
-    needs = f"{primary.variant} needs {primary.vram_gb:.2f} GiB"
-    if fallback is not None:
-        needs += f", the fallback {fallback.variant} needs {fallback.vram_gb:.2f} GiB"
-    free_gb = free_bytes / GIB
-    hints = []
-    if free_gb < smallest.vram_gb:
-        hints.append(
-            f"free at least {smallest.vram_gb - free_gb:.2f} GiB more on the GPU, "
-            "for example by lowering --gpu-memory-utilization of the vLLM server "
-            "that shares it, then restart this service"
-        )
-    if settings.max_vram_gb < smallest.vram_gb:
-        hints.append(f"raise ASR_MAX_VRAM_GB to at least {smallest.vram_gb:g}")
-    return (
-        f"Not enough GPU memory for the ASR model: {free_gb:.2f} GiB free of "
-        f"{total_bytes / GIB:.2f} GiB on {settings.device}, ASR_MAX_VRAM_GB="
-        f"{settings.max_vram_gb:g}; {needs}. To fix it: " + "; ".join(hints) + "."
-    )
 
 
 def is_out_of_memory(torch: Any, exc: BaseException) -> bool:
@@ -194,132 +75,142 @@ def release_cuda_memory(torch: Any) -> None:
         torch.cuda.empty_cache()
 
 
-def load_engine(
-    settings: Settings,
-    *,
-    torch_module: Any = None,
-    build_engine: BuildEngine | None = None,
-) -> Engine:
-    """Check the GPU memory, limit this process to its budget and load the model.
+def probe_gpu(torch: Any, settings: Settings) -> tuple[GpuInfo | None, str | None]:
+    """Read the free memory of the ASR_DEVICE GPU (this creates the CUDA context).
 
-    Args:
-        settings: the service settings.
-        torch_module: the ``torch`` module (injected by tests).
-        build_engine: loads one variant (injected by tests).
-
-    Raises:
-        FatalStartupError: with a human-readable explanation, when no variant can be
-            loaded.
+    Returns:
+        ``(info, None)``, or ``(None, reason)`` when CUDA is not usable.
     """
-    torch = (
-        torch_module if torch_module is not None else importlib.import_module("torch")
+    if not torch.cuda.is_available():
+        return None, (
+            "CUDA is not available in this container (check the NVIDIA driver, the "
+            "NVIDIA Container Toolkit and the GPU reservation of the asr service)"
+        )
+    # set_per_process_memory_fraction() raises ValueError for a device without an
+    # index ("cuda"), so resolve it to the current device first.
+    index = settings.device_index
+    if index is None:
+        index = torch.cuda.current_device()
+    free_bytes, total_bytes = torch.cuda.mem_get_info(index)
+    return GpuInfo(index, int(free_bytes), int(total_bytes)), None
+
+
+def limit_gpu_memory(torch: Any, gpu: GpuInfo, budget_bytes: int) -> None:
+    """Keep the CUDA caching allocator of this process within the budget."""
+    fraction = budget_bytes / gpu.total_bytes
+    torch.cuda.set_per_process_memory_fraction(fraction, gpu.index)
+    logger.info(
+        "Limited the CUDA caching allocator of this process to %.2f GiB "
+        "(fraction %.4f of %.2f GiB)",
+        budget_bytes / GIB,
+        fraction,
+        gpu.total_bytes / GIB,
     )
-    if build_engine is None:
 
-        def build_engine(s: Settings, spec: ModelSpec, plan: VramPlan | None) -> Engine:
-            return build_gigaam_engine(torch, s, spec, plan)
 
-    plan: VramPlan | None = None
-    if settings.device_type == "cuda":
-        if not torch.cuda.is_available():
-            raise FatalStartupError(
-                f"ASR_DEVICE={settings.device} but CUDA is not available in this "
-                "container: check the NVIDIA driver, the NVIDIA Container Toolkit and "
-                "the GPU reservation of the asr service"
-            )
-        # set_per_process_memory_fraction() raises ValueError for a device without
-        # an index ("cuda"), so resolve it to the current device first.
-        index = settings.device_index
-        if index is None:
-            index = torch.cuda.current_device()
-        free_bytes, total_bytes = torch.cuda.mem_get_info(index)
-        plan = plan_vram(settings, free_bytes, total_bytes)
-        torch.cuda.set_per_process_memory_fraction(plan.memory_fraction, index)
-        logger.info(
-            "Limited the CUDA caching allocator of this process to %.2f GiB "
-            "(fraction %.4f of %.2f GiB)",
-            plan.budget_bytes / GIB,
-            plan.memory_fraction,
-            total_bytes / GIB,
-        )
-        candidates = plan.candidates
-    else:
-        logger.warning(
-            "ASR_DEVICE=%s: running on the CPU, meant for tests only", settings.device
-        )
-        candidates = (model_specs(settings)[0],)
+def load_gigaam_model(backend: TorchBackend) -> Any:
+    """Download (or read from ``HF_HOME``) and instantiate a GigaAM model on the CPU.
 
-    for index, spec in enumerate(candidates):
-        try:
-            return build_engine(settings, spec, plan)
-        except FatalStartupError:
-            raise
-        except Exception as exc:
-            if not is_out_of_memory(torch, exc):
-                raise FatalStartupError(
-                    f"Failed to load {settings.model_id} {spec.variant} "
-                    f"(revision {spec.revision}): {type(exc).__name__}: {exc}"
-                ) from exc
-            error = f"{type(exc).__name__}: {exc}"
-        # Outside the except block, so that the traceback and the half-loaded model it
-        # references are released before the cache is emptied.
-        release_cuda_memory(torch)
-        if index + 1 == len(candidates):
-            budget = (
-                ""
-                if plan is None
-                else f" with a budget of {plan.budget_bytes / GIB:.2f} GiB"
-            )
-            raise FatalStartupError(
-                f"Out of memory while loading {spec.variant} (revision {spec.revision})"
-                f"{budget}: {error}. Free more GPU memory (e.g. lower "
-                "--gpu-memory-utilization of vLLM) or lower ASR_MAX_BATCH_SIZE / "
-                "ASR_MAX_BATCH_AUDIO_SECONDS"
-            )
-        logger.warning(
-            "CUDA out of memory while loading %s (%s); "
-            "falling back to %s (revision %s)",
-            spec.variant,
-            error,
-            candidates[index + 1].variant,
-            candidates[index + 1].revision,
+    Without ``code_repo`` the weights' own remote code is used (``AutoModel``).
+    With it, the weights are cross-loaded into the ``GigaAMModel`` class of
+    ``code_repo``: GigaAM-v3 through the GigaAM-Multilingual class, because the v3
+    remote code does not load on transformers 5.20.1.
+    """
+    # The weights are pytorch_model.bin files. Without this, transformers starts a
+    # background download of the safetensors conversion from the Hub converter
+    # bot's pull request (an unpinned revision), which is never used.
+    os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "true")
+    if backend.code_repo is None:
+        from transformers import AutoModel  # noqa: PLC0415  (heavy, imported lazily)
+
+        return AutoModel.from_pretrained(
+            backend.repo, revision=backend.revision, trust_remote_code=True
         )
-    raise AssertionError("unreachable")  # pragma: no cover
+
+    from transformers.dynamic_module_utils import (  # noqa: PLC0415
+        get_class_from_dynamic_module,
+    )
+
+    model_class = get_class_from_dynamic_module(
+        "modeling_gigaam.GigaAMModel",
+        backend.code_repo,
+        revision=backend.code_revision,
+    )
+    config = model_class.config_class.from_pretrained(
+        backend.repo, revision=backend.revision
+    )
+    # GigaAMModel.__init__ looks up tokenizer.model with
+    # revision=config._commit_hash, which transformers 5.20.1 no longer sets: the
+    # lookup would then go to the "main" branch (an OSError when offline).
+    config._commit_hash = backend.revision
+    return model_class.from_pretrained(
+        backend.repo, revision=backend.revision, config=config
+    )
 
 
 def build_gigaam_engine(
-    torch: Any, settings: Settings, spec: ModelSpec, plan: VramPlan | None
+    torch: Any, settings: Settings, backend: TorchBackend, device: str
 ) -> GigaAMEngine:
-    """Download (or read from ``HF_HOME``), load and warm up one GigaAM variant."""
-    from transformers import AutoModel  # noqa: PLC0415  (heavy, imported lazily)
+    """Load one GigaAM model on ``device`` and warm it up.
 
+    Raises:
+        GpuOutOfMemoryError: CUDA ran out of memory.
+        GpuLoadError: any other failure (download, CUDA or driver error...), logged
+            here with its traceback. In both cases the memory has been released.
+    """
     started = time.monotonic()
     logger.info(
-        "Loading %s variant %s (revision %s) on %s",
-        settings.model_id,
-        spec.variant,
-        spec.revision,
-        settings.device,
+        "Loading %s (revision %s) on %s", backend.repo, backend.revision, device
     )
-    model = AutoModel.from_pretrained(
-        settings.model_id, revision=spec.revision, trust_remote_code=True
-    )
+    model = None
+    try:
+        model = load_gigaam_model(backend)
+        engine = _prepare(torch, settings, backend, device, model)
+    except Exception as exc:
+        out_of_memory = is_out_of_memory(torch, exc)
+        if not out_of_memory:
+            logger.error("Loading %s on %s failed", backend.repo, device, exc_info=True)
+        error = f"{type(exc).__name__}: {exc}"
+    else:
+        logger.info(
+            "Loaded %s (revision %s) on %s in %.1f s (fp16 encoder: %s)",
+            backend.variant,
+            backend.revision,
+            device,
+            time.monotonic() - started,
+            engine.info.fp16_encoder,
+        )
+        return engine
+    # Outside the except block, so that the traceback and the half-loaded model it
+    # references are released before the cache is emptied.
+    del model
+    release_cuda_memory(torch)
+    if out_of_memory:
+        raise GpuOutOfMemoryError(
+            f"CUDA out of memory while loading {backend.repo} on {device}: {error}"
+        )
+    raise GpuLoadError(f"Loading {backend.repo} on {device} failed: {error}")
+
+
+def _prepare(
+    torch: Any, settings: Settings, backend: TorchBackend, device: str, model: Any
+) -> GigaAMEngine:
+    """Move a loaded model to ``device`` (fp16 encoder on CUDA) and warm it up."""
     model.eval()
-    fp16 = settings.fp16_encoder and settings.device_type == "cuda"
+    fp16 = settings.fp16_encoder and device.startswith("cuda")
     if fp16:
-        # Only the encoder: the mel front-end and the CTC head must stay in float32
-        # (never call model.half()). Halving before the transfer also halves the copy.
+        # Only the encoder: the mel front-end and the CTC/RNN-T heads must stay in
+        # float32 (never call model.half()). Halving before the transfer also halves
+        # the copy.
         model.model.encoder = model.model.encoder.half()
-    model.to(settings.device)
+    model.to(device)
 
     info = EngineInfo(
-        model_id=settings.model_id,
-        variant=spec.variant,
-        revision=spec.revision,
-        device=settings.device,
+        model_id=backend.repo,
+        variant=backend.variant,
+        revision=backend.revision,
+        device=device,
         fp16_encoder=fp16,
-        vram_limit_gb=None if plan is None else round(plan.budget_bytes / GIB, 2),
-        vram_free_gb_at_start=None if plan is None else round(plan.free_bytes / GIB, 2),
     )
     engine = GigaAMEngine(torch, model, info)
     try:
@@ -332,29 +223,22 @@ def build_gigaam_engine(
         error = None
     if error is not None:
         logger.warning(
-            "Warm-up with an fp16 encoder failed (%s); retrying in float32", error
+            "Warm-up of %s with an fp16 encoder failed (%s); retrying in float32",
+            backend.variant,
+            error,
         )
         model.model.encoder = model.model.encoder.float()
         release_cuda_memory(torch)
         engine.info = replace(info, fp16_encoder=False)
         engine.warm_up(settings)
-
-    logger.info(
-        "Loaded %s (revision %s) on %s in %.1f s (fp16 encoder: %s)",
-        spec.variant,
-        spec.revision,
-        settings.device,
-        time.monotonic() - started,
-        engine.info.fp16_encoder,
-    )
     return engine
 
 
 class GigaAMEngine:
-    """Batched GigaAM CTC inference. Not thread-safe: call it from one thread."""
+    """Batched GigaAM CTC or RNN-T inference. Not thread-safe: use one thread."""
 
     def __init__(self, torch: Any, model: Any, info: EngineInfo):
-        """Wrap a loaded ``AutoModel`` (``model.model`` is the GigaAMASR module)."""
+        """Wrap a loaded ``GigaAMModel`` (``model.model`` is the GigaAMASR module)."""
         self._torch = torch
         self._asr = model.model
         self._device = torch.device(info.device)

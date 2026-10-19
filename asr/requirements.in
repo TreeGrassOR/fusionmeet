@@ -1,7 +1,9 @@
 # Direct runtime dependencies of the ASR service. requirements.txt pins the whole
 # dependency tree and is generated from this file (see the command at its top).
 # Versions follow the ai-sage/GigaAM-Multilingual model card: torch==2.10.*,
-# torchaudio==2.10.*, transformers==5.*, hydra-core, omegaconf.
+# torchaudio==2.10.*, transformers==5.*, hydra-core, omegaconf. torch runs the
+# GigaAM models on the GPU; onnx-asr on the CPU build of onnxruntime runs every
+# model on the CPU (see README.md, "Models").
 --extra-index-url https://download.pytorch.org/whl/cu128
 
 torch==2.10.0+cu128
@@ -12,6 +14,10 @@ hydra-core==1.3.7
 omegaconf==2.3.1
 sentencepiece==0.2.2
 soundfile==0.14.0
+onnx-asr==0.12.0
+onnxruntime==1.30.0
+# config.yaml of the punctuation model
+pyyaml==6.0.3
 numpy==2.5.4
 # Never used at runtime: transformers' check_imports() statically finds
 # "from pyannote..." in modeling_gigaam.py (longform only) and refuses to load the
