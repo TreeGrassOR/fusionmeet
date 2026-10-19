@@ -2,14 +2,18 @@
 
 import asyncio
 import contextlib
+import functools
 import logging
 import os
+import time
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 from lasuite.plugins import kyutai
 from livekit import api, rtc
 from livekit.agents import (
     Agent,
+    AgentServer,
     AgentSession,
     AutoSubscribe,
     JobContext,
@@ -24,11 +28,18 @@ from livekit.agents import (
 from livekit.agents import (
     room_io as lk_room_io,
 )
+from livekit.agents import (
+    stt as lk_stt,
+)
 from livekit.plugins import deepgram, silero
 
+import gigaam_stt
 import voxtral_vllm_stt
 from observability import configure_sentry, set_job_context
 from tasks import done_callback
+from transcript_store import StoreConfig
+from transcription_control import TranscriptionController
+from transcription_reconciler import TranscriptionReconciler
 
 load_dotenv()
 
@@ -39,6 +50,13 @@ STT_PROVIDER = os.getenv("STT_PROVIDER", "deepgram")
 ENABLE_SILERO_VAD = os.getenv("ENABLE_SILERO_VAD", "true").lower() == "true"
 
 SESSION_DRAIN_TIMEOUT_S = 15.0
+# When a participant leaves, AgentSession waits session_close_transcript_timeout
+# (2 s by default) for the final transcript. GigaAM recognizes the last phrase
+# only once the VAD ended it, through the asr service: wait longer (keep it
+# below SESSION_DRAIN_TIMEOUT_S).
+GIGAAM_SESSION_CLOSE_TIMEOUT_S = float(
+    os.getenv("GIGAAM_SESSION_CLOSE_TIMEOUT_S", "10")
+)
 
 
 def create_stt_provider(vad: silero.VAD | None = None):
@@ -63,6 +81,11 @@ def create_stt_provider(vad: silero.VAD | None = None):
     elif STT_PROVIDER == "voxtral-vllm":
         # The plugin resolves base_url / model / api_key from the environment.
         _stt_instance = voxtral_vllm_stt.STT(vad=vad)
+    elif STT_PROVIDER == "gigaam":
+        # The plugin resolves the ASR service settings from the environment.
+        if vad is None:
+            raise ValueError("STT_PROVIDER=gigaam requires ENABLE_SILERO_VAD=true")
+        _stt_instance = gigaam_stt.STT(vad=vad)
     else:
         raise ValueError(f"Unknown STT_PROVIDER: {STT_PROVIDER}")
 
@@ -72,8 +95,21 @@ def create_stt_provider(vad: silero.VAD | None = None):
 class Transcriber(Agent):
     """Create a transcription agent for a specific participant."""
 
-    def __init__(self, *, participant_identity: str, vad: silero.VAD | None = None):
-        """Init transcription agent."""
+    def __init__(
+        self,
+        *,
+        participant_identity: str,
+        vad: silero.VAD | None = None,
+        on_final: Callable[[str, float, float], None] | None = None,
+    ):
+        """Init transcription agent.
+
+        Args:
+            participant_identity: Identity of the transcribed participant.
+            vad: Shared, prewarmed VAD instance.
+            on_final: Called with (text, wall-clock start, wall-clock end in
+                epoch seconds) for every final transcript.
+        """
         stt = create_stt_provider(vad=vad)
 
         super().__init__(
@@ -81,6 +117,33 @@ class Transcriber(Agent):
             stt=stt,
         )
         self.participant_identity = participant_identity
+        self._on_final = on_final
+
+    async def stt_node(self, audio, model_settings):
+        """Forward the STT events unchanged, reporting the final transcripts."""
+        async for ev in Agent.default.stt_node(self, audio, model_settings):
+            if (
+                self._on_final is not None
+                and ev.type == lk_stt.SpeechEventType.FINAL_TRANSCRIPT
+            ):
+                self._report_final(ev)
+            yield ev
+
+    def _report_final(self, ev: lk_stt.SpeechEvent) -> None:
+        # never let storage break the STT pipeline (and the live subtitles)
+        try:
+            if not ev.alternatives or not (text := ev.alternatives[0].text.strip()):
+                return
+            alternative = ev.alternatives[0]
+            metadata = alternative.metadata or {}
+            end = float(metadata.get("wall_end", time.time()))
+            duration = max(0.0, alternative.end_time - alternative.start_time)
+            start = float(metadata.get("wall_start", end - duration))
+            self._on_final(text, start, end)
+        except Exception:
+            logger.exception(
+                "failed to record a final transcript of %s", self.participant_identity
+            )
 
 
 class MultiUserTranscriber:
@@ -92,22 +155,66 @@ class MultiUserTranscriber:
         self._sessions: dict[str, AgentSession] = {}
         self._starting: dict[str, asyncio.Task] = {}
         self._tasks: set[asyncio.Task] = set()
+        self._transcription: TranscriptionController | None = None
+        if (config := StoreConfig.from_env()) is not None:
+            self._transcription = TranscriptionController(
+                room_id=ctx.job.room.name,
+                config=config,
+                wait_pending=gigaam_stt.wait_idle if STT_PROVIDER == "gigaam" else None,
+            )
 
     def start(self):
         """Start listening for participant connection events."""
         self.ctx.room.on("participant_connected", self.on_participant_connected)
         self.ctx.room.on("participant_disconnected", self.on_participant_disconnected)
+        if self._transcription is not None:
+            self.ctx.room.on(
+                "room_metadata_changed", self._transcription.on_room_metadata_changed
+            )
+
+    def watch_transcription(self):
+        """Apply the room metadata read on connection (stored transcription)."""
+        if self._transcription is not None:
+            self._transcription.on_room_metadata_changed("", self.ctx.room.metadata)
 
     async def aclose(self):
         """Close all sessions and cleanup resources."""
-        await utils.aio.cancel_and_wait(*self._tasks)
+        try:
+            await utils.aio.cancel_and_wait(*self._tasks)
 
-        await asyncio.gather(
-            *[self._close_session(session) for session in self._sessions.values()]
-        )
+            results = await asyncio.gather(
+                *[self._close_session(session) for session in self._sessions.values()],
+                return_exceptions=True,
+            )
+            for result in results:
+                if isinstance(result, BaseException):
+                    logger.warning("failed to close a session: %r", result)
 
-        self.ctx.room.off("participant_connected", self.on_participant_connected)
-        self.ctx.room.off("participant_disconnected", self.on_participant_disconnected)
+            self.ctx.room.off("participant_connected", self.on_participant_connected)
+            self.ctx.room.off(
+                "participant_disconnected", self.on_participant_disconnected
+            )
+        finally:
+            # the call ended: write the transcript of a running transcription
+            if self._transcription is not None:
+                self.ctx.room.off(
+                    "room_metadata_changed",
+                    self._transcription.on_room_metadata_changed,
+                )
+                await self._transcription.aclose()
+
+    def _on_final_transcript(
+        self, participant: rtc.RemoteParticipant, text: str, start: float, end: float
+    ) -> None:
+        if self._transcription is not None:
+            self._transcription.add_final(
+                identity=participant.identity,
+                # the name at that moment (participant objects are kept updated)
+                name=participant.name or participant.identity,
+                start=start,
+                end=end,
+                text=text,
+            )
 
     def on_participant_connected(self, participant: rtc.RemoteParticipant):
         """Handle new participant connection by starting transcription session."""
@@ -157,13 +264,24 @@ class MultiUserTranscriber:
         already reserved.
         """
         vad = self.ctx.proc.userdata.get("vad", None)
-        session = AgentSession(vad=vad)
+        session_options = {}
+        audio_input = {}
+        if STT_PROVIDER == "gigaam":
+            session_options["session_close_transcript_timeout"] = (
+                GIGAAM_SESSION_CLOSE_TIMEOUT_S
+            )
+            # GigaAM works at 16 kHz; the pre-connect audio handler is per room
+            # and must not be registered once per participant.
+            audio_input["audio_input"] = lk_room_io.AudioInputOptions(
+                sample_rate=gigaam_stt.SAMPLE_RATE, pre_connect_audio=False
+            )
+        session = AgentSession(vad=vad, **session_options)
         room_io = RoomIO(
             agent_session=session,
             room=self.ctx.room,
             participant=participant,
             options=lk_room_io.RoomOptions(
-                text_input=False, audio_output=False, text_output=True
+                text_input=False, audio_output=False, text_output=True, **audio_input
             ),
         )
         try:
@@ -172,6 +290,7 @@ class MultiUserTranscriber:
                 agent=Transcriber(
                     participant_identity=participant.identity,
                     vad=vad,
+                    on_final=functools.partial(self._on_final_transcript, participant),
                 )
             )
         except BaseException:
@@ -190,6 +309,10 @@ class MultiUserTranscriber:
                 "session drain timed out after %.0fs; forcing close",
                 SESSION_DRAIN_TIMEOUT_S,
             )
+        except RuntimeError:
+            # already closed: the job closes its primary session before the
+            # shutdown callbacks run
+            logger.debug("session already closed")
         await sess.aclose()
 
 
@@ -201,6 +324,7 @@ async def entrypoint(ctx: JobContext):
     transcriber.start()
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    transcriber.watch_transcription()
     for participant in ctx.room.remote_participants.values():
         transcriber.on_participant_connected(participant)
 
@@ -250,7 +374,7 @@ if __name__ == "__main__":
     # Initialize Sentry for the worker process. Each job runs in its own
     # (forked) process and re-initializes Sentry via prewarm().
     configure_sentry(TRANSCRIBER_AGENT_NAME)
-    cli.run_app(
+    server = AgentServer.from_server_options(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
             request_fnc=handle_transcriber_job_request,
@@ -259,3 +383,9 @@ if __name__ == "__main__":
             permissions=WorkerPermissions(hidden=True),
         )
     )
+    # LiveKit does not dispatch a job again when its process dies: the worker
+    # re-dispatches the transcriber to the transcriptions left without it
+    reconciler = TranscriptionReconciler.from_env(TRANSCRIBER_AGENT_NAME)
+    if reconciler is not None:
+        reconciler.attach(server)
+    cli.run_app(server)
