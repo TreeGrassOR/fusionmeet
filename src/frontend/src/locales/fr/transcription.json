@@ -25,6 +25,19 @@
     },
     "button": "OK"
   },
+  "modelSelect": {
+    "label": "Modèle de reconnaissance",
+    "default": "par défaut",
+    "status": {
+      "loading": "chargement en cours",
+      "failed": "indisponible"
+    },
+    "loading": "Chargement des modèles de reconnaissance…",
+    "loadError": "Impossible de charger les modèles de reconnaissance. Veuillez réessayer plus tard.",
+    "chosenUnavailable": "Le modèle choisi pour cette réunion est indisponible : le modèle par défaut est utilisé.",
+    "saved": "Modèle modifié. Les nouvelles phrases seront reconnues avec ce modèle.",
+    "saveError": "Impossible de modifier le modèle. Veuillez réessayer."
+  },
   "myRecordings": {
     "menuItem": "Mes enregistrements et transcriptions",
     "title": "Mes enregistrements et transcriptions",
@@ -63,6 +76,8 @@
       "label": "Transcription",
       "startedAt": "Démarrée à {{time}}",
       "timeRange": "{{start}} – {{end}}",
+      "models_one": "Modèle de reconnaissance : {{names}}",
+      "models_other": "Modèles de reconnaissance : {{names}}",
       "download": {
         "md": ".md",
         "json": ".json"

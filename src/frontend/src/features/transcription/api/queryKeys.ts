@@ -4,4 +4,7 @@ export const transcriptionKeys = {
   myRecordings: 'myRecordings',
   startTranscription: 'startTranscription',
   stopTranscription: 'stopTranscription',
+  asrModels: 'asrModels',
+  roomTranscriptionSettings: 'roomTranscriptionSettings',
+  updateRoomTranscriptionSettings: 'updateRoomTranscriptionSettings',
 }

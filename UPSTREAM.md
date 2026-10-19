@@ -14,7 +14,7 @@
 | `src/agents/gigaam_stt.py`, `transcript_store.py`, `transcription_control.py`, `transcription_reconciler.py`, `transcription_settings.py`, `tests/` | STT-провайдер `gigaam`, хранение расшифровки в S3, управление через метаданные комнаты, повторный запуск агента после падения, модель распознавания комнаты |
 | `src/backend/transcripts/` | Django-приложение: старт и остановка расшифровки, список, скачивание, хук агента |
 | `src/mail/mjml/transcript_ready.mjml` | письмо инициатору о готовой расшифровке |
-| `src/frontend/src/features/transcription/` | кнопки «Расшифровка» и «Запись», индикатор, страница «Мои записи и расшифровки» |
+| `src/frontend/src/features/transcription/` | кнопки «Расшифровка» и «Запись», индикатор, страница «Мои записи и расшифровки», выбор модели распознавания |
 | `src/frontend/src/primitives/Slider.tsx`, `src/frontend/src/stores/participantAudio.ts`, компоненты громкости в `features/participants`, `features/participantTile`, `features/rooms` | громкость участников |
 | `src/frontend/src/features/rooms/livekit/components/ConnectionStateToast.tsx` | переводимая замена уведомления о подключении из `@livekit/components-react` (там тексты зашиты по-английски) |
 | `src/frontend/src/locales/*/transcription.json`, `*/participantAudio.json` | строки новых функций (отдельные пространства имён, чтобы не трогать файлы upstream) |
@@ -37,6 +37,7 @@
 | `src/frontend/src/routes.ts` | маршрут `/my-recordings` |
 | `src/frontend/src/layout/Header.tsx` | пункт «Мои записи и расшифровки» в меню пользователя |
 | `src/frontend/src/features/rooms/livekit/prefabs/ControlBar/DesktopControlBar.tsx`, `MobileControlBar.tsx` | кнопки «Расшифровка» и «Запись» |
+| `src/frontend/src/features/settings/components/SettingsDialogExtended.tsx`, `tabs/TranscriptionTab.tsx` | вкладка «Расшифровка» в настройках: выбор модели распознавания для тех, кто может запускать расшифровку; язык встречи (WhisperX) показан, только если доступен режим записи `transcript` |
 | `src/frontend/src/features/rooms/livekit/prefabs/VideoConference.tsx` | провайдер расшифровки, синхронизатор громкости, переводимый `ConnectionStateToast` |
 | `src/frontend/src/features/pip/components/PipView.tsx` | переводимый `ConnectionStateToast` |
 | `src/frontend/src/features/rooms/livekit/components/controls/StartMediaButton.tsx` | перевод «Start Audio» и «Start Video» |

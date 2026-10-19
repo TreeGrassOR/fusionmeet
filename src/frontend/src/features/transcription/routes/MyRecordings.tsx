@@ -14,11 +14,14 @@ import { Screen } from '@/layout/Screen'
 import { H, Icon, LinkButton, Text } from '@/primitives'
 import { Spinner } from '@/primitives/Spinner'
 import { formatDate } from '@/utils/formatDate'
+import { useAsrModels } from '../api/listAsrModels'
 import { listRecordings } from '../api/listRecordings'
 import { listTranscripts } from '../api/listTranscripts'
 import { transcriptionKeys } from '../api/queryKeys'
 import { transcriptDownloadUrl } from '../api/transcriptDownloadUrl'
+import { useIsTranscriptionEnabled } from '../hooks/useIsTranscriptionEnabled'
 import type { TranscriptApi } from '../types'
+import { getTranscriptModelLabels } from '../utils/asrModels'
 import {
   Availability,
   getRecordingAvailability,
@@ -177,6 +180,16 @@ const TranscriptRow = ({ transcript }: { transcript: TranscriptApi }) => {
   const availability = getTranscriptAvailability(transcript)
   const formats = getTranscriptFormats(transcript)
 
+  // Labels of the models come from the ASR service; their ids are shown
+  // when it cannot be reached.
+  const isTranscriptionEnabled = useIsTranscriptionEnabled()
+  const asrModelsQuery = useAsrModels({
+    enabled: isTranscriptionEnabled && !!transcript.models?.length,
+  })
+  const modelLabels = asrModelsQuery.isLoading
+    ? []
+    : getTranscriptModelLabels(transcript.models, asrModelsQuery.data)
+
   const start = formatters.time.format(getTranscriptStart(transcript))
   const time = transcript.ended_at
     ? t('transcript.timeRange', {
@@ -196,6 +209,14 @@ const TranscriptRow = ({ transcript }: { transcript: TranscriptApi }) => {
           <Text variant="smNote" margin={false}>
             {time}
           </Text>
+          {modelLabels.length > 0 && (
+            <Text variant="smNote" margin={false}>
+              {t('transcript.models', {
+                count: modelLabels.length,
+                names: modelLabels.join(', '),
+              })}
+            </Text>
+          )}
         </VStack>
       </HStack>
       {availability === Availability.Available ? (

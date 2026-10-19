@@ -33,6 +33,7 @@ import {
   useIsRecordingModeEnabled,
   useRecordingEncoding,
 } from '@/features/recording'
+import { useTranscriptionSettingsVisibility } from '@/features/transcription/hooks/useTranscriptionSettingsVisibility'
 
 const tabsStyle = css({
   maxHeight: '40.625rem', // fixme size copied from meet settings modal
@@ -80,6 +81,7 @@ export const SettingsDialogExtended = (props: SettingsDialogExtended) => {
   const { isCustomEncodingEnabled } = useRecordingEncoding()
   const showRecordingTab =
     isAdminOrOwner && !!isScreenRecordingEnabled && isCustomEncodingEnabled
+  const { showTab: showTranscriptionTab } = useTranscriptionSettingsVisibility()
 
   return (
     <Dialog innerRef={dialogEl} {...props} role="dialog" type="flex">
@@ -127,7 +129,7 @@ export const SettingsDialogExtended = (props: SettingsDialogExtended) => {
               <RiKeyboardBoxLine />
               {isWideScreen && t(`tabs.${SettingsDialogExtendedKey.SHORTCUTS}`)}
             </Tab>
-            {isAdminOrOwner && (
+            {showTranscriptionTab && (
               <Tab icon highlight id={SettingsDialogExtendedKey.TRANSCRIPTION}>
                 <Icon name="speech_to_text" />
                 {isWideScreen &&

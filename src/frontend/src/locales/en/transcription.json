@@ -25,6 +25,19 @@
     },
     "button": "OK"
   },
+  "modelSelect": {
+    "label": "Recognition model",
+    "default": "default",
+    "status": {
+      "loading": "loading",
+      "failed": "unavailable"
+    },
+    "loading": "Loading the recognition models…",
+    "loadError": "The recognition models could not be loaded. Please try again later.",
+    "chosenUnavailable": "The model chosen for this meeting is unavailable: the default model is used.",
+    "saved": "Model changed. New phrases will be recognized with it.",
+    "saveError": "The model could not be changed. Please try again."
+  },
   "myRecordings": {
     "menuItem": "My recordings and transcripts",
     "title": "My recordings and transcripts",
@@ -63,6 +76,8 @@
       "label": "Transcript",
       "startedAt": "Started at {{time}}",
       "timeRange": "{{start}} – {{end}}",
+      "models_one": "Recognition model: {{names}}",
+      "models_other": "Recognition models: {{names}}",
       "download": {
         "md": ".md",
         "json": ".json"
