@@ -24,6 +24,9 @@ const FeedbackRoute = lazy(() => import('@/features/rooms/routes/Feedback'))
 const ConnectionTestRoute = lazy(
   () => import('@/features/diagnostics/routes/ConnectionTest')
 )
+const MyRecordingsRoute = lazy(
+  () => import('@/features/transcription/routes/MyRecordings')
+)
 
 const roomIdRegex = new RegExp(`^[/](?<roomId>${flexibleRoomIdPattern})$`)
 
@@ -38,7 +41,8 @@ export const routes: Record<
   | 'sdkCreatePopup'
   | 'sdkCreateButton'
   | 'sdkSettingsPopup'
-  | 'recordingDownload',
+  | 'recordingDownload'
+  | 'myRecordings',
   {
     name: RouteName
     path: RegExp | string
@@ -103,6 +107,12 @@ export const routes: Record<
     path: /^\/recording\/(?<recordingId>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
     to: (recordingId: string) => `/recording/${recordingId.trim()}`,
     Component: RecordingDownloadRoute,
+  },
+  // Not "/recordings": a one-segment path of 10 letters matches the room route.
+  myRecordings: {
+    name: 'myRecordings',
+    path: '/my-recordings',
+    Component: MyRecordingsRoute,
   },
 }
 

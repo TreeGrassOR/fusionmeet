@@ -15,6 +15,11 @@ import { VisualOnlyTooltip } from '@/primitives/VisualOnlyTooltip'
 import { useLoginHint } from '@/hooks/useLoginHint'
 import { logout } from '@/features/auth/utils/logout'
 import { useMemo } from 'react'
+import { navigateTo } from '@/navigation/navigateTo'
+import {
+  MY_RECORDINGS_MENU_VALUE,
+  useMyRecordingsMenuItems,
+} from '@/features/transcription/hooks/useMyRecordingsMenuItems'
 
 const Logo = () => (
   <img
@@ -94,6 +99,7 @@ export const Header = () => {
   const isTermsOfService = useMatchesRoute('termsOfService')
   const isRoom = useMatchesRoute('room')
   const { user, isLoggedIn } = useUser()
+  const myRecordingsMenuItems = useMyRecordingsMenuItems()
 
   const loginButtonDisabledByUrl = useMemo(() => isLoginButtonHidden(), [])
 
@@ -194,8 +200,14 @@ export const Header = () => {
                   </Button>
                   <MenuList
                     variant={'light'}
-                    items={[{ value: 'logout', label: t('logout') }]}
+                    items={[
+                      ...myRecordingsMenuItems,
+                      { value: 'logout', label: t('logout') },
+                    ]}
                     onAction={(value) => {
+                      if (value === MY_RECORDINGS_MENU_VALUE) {
+                        navigateTo('myRecordings')
+                      }
                       if (value === 'logout') {
                         logout()
                       }

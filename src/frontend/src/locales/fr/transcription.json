@@ -1,0 +1,81 @@
+{
+  "toggle": {
+    "start": "Démarrer la transcription",
+    "starting": "Démarrage de la transcription…",
+    "stop": "Arrêter la transcription",
+    "stopping": "Arrêt de la transcription…"
+  },
+  "recordingToggle": {
+    "start": "Démarrer l'enregistrement",
+    "startWithLimit": "Démarrer l'enregistrement (jusqu'à {{max_duration}})",
+    "starting": "Démarrage de l'enregistrement…",
+    "stop": "Arrêter l'enregistrement",
+    "saving": "Sauvegarde de l'enregistrement…",
+    "anotherModeStarted": "Enregistrement indisponible : un autre enregistrement est en cours"
+  },
+  "indicator": {
+    "started": "Transcription en cours",
+    "stopping": "Finalisation de la transcription…"
+  },
+  "errorDialog": {
+    "title": "Erreur de transcription",
+    "body": {
+      "start": "La transcription n'a pas pu démarrer. Veuillez réessayer dans un instant.",
+      "stop": "La transcription n'a pas pu être arrêtée. Veuillez réessayer dans un instant."
+    },
+    "button": "OK"
+  },
+  "myRecordings": {
+    "menuItem": "Mes enregistrements et transcriptions",
+    "title": "Mes enregistrements et transcriptions",
+    "description": "Les enregistrements et transcriptions des réunions que vous avez lancées ou animées. Les fichiers sont téléchargeables dès qu'ils sont prêts.",
+    "loading": "Chargement…",
+    "empty": "Vous n'avez encore aucun enregistrement ni transcription.",
+    "participants": "Intervenants : {{names}}",
+    "error": {
+      "all": "Impossible de charger vos enregistrements et transcriptions. Veuillez réessayer plus tard.",
+      "recordings": "Impossible de charger vos enregistrements. Veuillez réessayer plus tard.",
+      "transcripts": "Impossible de charger vos transcriptions. Veuillez réessayer plus tard."
+    },
+    "login": {
+      "heading": "Connexion requise",
+      "body": "Connectez-vous pour voir vos enregistrements et transcriptions."
+    },
+    "recording": {
+      "video": "Enregistrement vidéo",
+      "audio": "Enregistrement audio",
+      "startedAt": "Démarré à {{time}}",
+      "download": "Télécharger",
+      "downloadAriaLabel": {
+        "video": "Télécharger l'enregistrement vidéo",
+        "audio": "Télécharger l'enregistrement audio"
+      },
+      "expiresOn": "Disponible jusqu'au {{date}}",
+      "expiredOn": "Supprimé le {{date}}",
+      "status": {
+        "inProgress": "Enregistrement en cours",
+        "processing": "Sauvegarde…",
+        "expired": "Expiré",
+        "failed": "Échec de l'enregistrement"
+      }
+    },
+    "transcript": {
+      "label": "Transcription",
+      "startedAt": "Démarrée à {{time}}",
+      "timeRange": "{{start}} – {{end}}",
+      "download": {
+        "md": ".md",
+        "json": ".json"
+      },
+      "downloadAriaLabel": {
+        "md": "Télécharger la transcription (Markdown)",
+        "json": "Télécharger la transcription (JSON)"
+      },
+      "status": {
+        "inProgress": "Transcription en cours",
+        "processing": "Préparation de la transcription…",
+        "failed": "Échec de la transcription"
+      }
+    }
+  }
+}

@@ -34,6 +34,7 @@ import { useSize } from '../../hooks/useResizeObserver'
 import { useRegisterKeyboardShortcut } from '@/features/shortcuts/useRegisterKeyboardShortcut'
 import { useRaisedHand } from '@/features/rooms/livekit/hooks/useRaisedHand'
 import { useRoomContext } from '@livekit/components-react'
+import { RecordingToggle, TranscriptionToggle } from '@/features/transcription'
 
 // Hand collapses first, then reactions; hidden toggles move into the menu.
 const COLLAPSIBLE_COUNT = 2
@@ -198,6 +199,16 @@ export function MobileControlBar({
                 onPress={closeMenu}
               />
             )}
+            <TranscriptionToggle
+              variant="primaryTextDark"
+              description={true}
+              onPress={closeMenu}
+            />
+            <RecordingToggle
+              variant="primaryTextDark"
+              description={true}
+              onPress={closeMenu}
+            />
             <ChatToggle description={true} onPress={closeMenu} />
             <ParticipantsToggle description={true} onPress={closeMenu} />
             <ToolsToggle description={true} onPress={closeMenu} />

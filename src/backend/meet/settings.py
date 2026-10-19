@@ -332,6 +332,7 @@ class Base(Configuration):
         # Meet
         "core",
         "demo",
+        "transcripts",
         "drf_spectacular",
         # Third party apps
         "corsheaders",
@@ -1084,6 +1085,37 @@ class Base(Configuration):
     METADATA_COLLECTOR_OUTPUT_FOLDER = values.Value(
         "metadata",
         environ_name="METADATA_COLLECTOR_OUTPUT_FOLDER",
+        environ_prefix=None,
+    )
+
+    # Transcription settings (per-participant transcription agent, see transcripts app)
+    TRANSCRIPTION_ENABLED = values.BooleanValue(
+        False, environ_name="TRANSCRIPTION_ENABLED", environ_prefix=None
+    )
+    TRANSCRIPTION_AGENT_NAME = values.Value(
+        "multi-user-transcriber",
+        environ_name="TRANSCRIPTION_AGENT_NAME",
+        environ_prefix=None,
+    )
+    TRANSCRIPTION_AGENT_TOKEN = SecretFileValue(
+        None, environ_name="TRANSCRIPTION_AGENT_TOKEN", environ_prefix=None
+    )
+    TRANSCRIPTION_S3_PREFIX = values.Value(
+        "transcriptions",
+        environ_name="TRANSCRIPTION_S3_PREFIX",
+        environ_prefix=None,
+    )
+    TRANSCRIPTION_LANGUAGE = values.Value(
+        "ru", environ_name="TRANSCRIPTION_LANGUAGE", environ_prefix=None
+    )
+    TRANSCRIPTION_LIST_URL = values.Value(
+        None, environ_name="TRANSCRIPTION_LIST_URL", environ_prefix=None
+    )
+    # A transcript still "stopping" after this delay is considered abandoned by
+    # the agent: a new transcription can start and the room metadata is cleaned
+    TRANSCRIPTION_STOPPING_TIMEOUT_SECONDS = values.PositiveIntegerValue(
+        180,
+        environ_name="TRANSCRIPTION_STOPPING_TIMEOUT_SECONDS",
         environ_prefix=None,
     )
 

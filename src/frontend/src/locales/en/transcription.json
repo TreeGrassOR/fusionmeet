@@ -1,0 +1,81 @@
+{
+  "toggle": {
+    "start": "Start transcription",
+    "starting": "Starting transcription…",
+    "stop": "Stop transcription",
+    "stopping": "Stopping transcription…"
+  },
+  "recordingToggle": {
+    "start": "Start recording",
+    "startWithLimit": "Start recording (up to {{max_duration}})",
+    "starting": "Starting recording…",
+    "stop": "Stop recording",
+    "saving": "Saving the recording…",
+    "anotherModeStarted": "Recording unavailable: another recording is in progress"
+  },
+  "indicator": {
+    "started": "Transcription in progress",
+    "stopping": "Finishing the transcript…"
+  },
+  "errorDialog": {
+    "title": "Transcription error",
+    "body": {
+      "start": "The transcription could not be started. Please try again in a moment.",
+      "stop": "The transcription could not be stopped. Please try again in a moment."
+    },
+    "button": "OK"
+  },
+  "myRecordings": {
+    "menuItem": "My recordings and transcripts",
+    "title": "My recordings and transcripts",
+    "description": "Recordings and transcripts of the meetings you started or host. Files can be downloaded once they are ready.",
+    "loading": "Loading…",
+    "empty": "You have no recordings or transcripts yet.",
+    "participants": "Speakers: {{names}}",
+    "error": {
+      "all": "Your recordings and transcripts could not be loaded. Please try again later.",
+      "recordings": "Your recordings could not be loaded. Please try again later.",
+      "transcripts": "Your transcripts could not be loaded. Please try again later."
+    },
+    "login": {
+      "heading": "Login required",
+      "body": "Log in to see your recordings and transcripts."
+    },
+    "recording": {
+      "video": "Video recording",
+      "audio": "Audio recording",
+      "startedAt": "Started at {{time}}",
+      "download": "Download",
+      "downloadAriaLabel": {
+        "video": "Download the video recording",
+        "audio": "Download the audio recording"
+      },
+      "expiresOn": "Available until {{date}}",
+      "expiredOn": "Deleted on {{date}}",
+      "status": {
+        "inProgress": "Recording in progress",
+        "processing": "Saving…",
+        "expired": "Expired",
+        "failed": "Recording failed"
+      }
+    },
+    "transcript": {
+      "label": "Transcript",
+      "startedAt": "Started at {{time}}",
+      "timeRange": "{{start}} – {{end}}",
+      "download": {
+        "md": ".md",
+        "json": ".json"
+      },
+      "downloadAriaLabel": {
+        "md": "Download the transcript (Markdown)",
+        "json": "Download the transcript (JSON)"
+      },
+      "status": {
+        "inProgress": "Transcription in progress",
+        "processing": "Preparing the transcript…",
+        "failed": "Transcription failed"
+      }
+    }
+  }
+}
