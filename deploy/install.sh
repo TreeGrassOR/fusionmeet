@@ -501,6 +501,13 @@ show_vram() {
     note "контейнер ${FM_PROJECT}-asr уже работает: занятая им память входит в «занято»."
   fi
 
+  local asr_device
+  asr_device=$(setting ASR_DEVICE cuda)
+  if [[ ${asr_device,,} == cpu ]]; then
+    ok "ASR_DEVICE=cpu: все модели распознавания работают на CPU, видеокарта не используется"
+    return
+  fi
+
   # asr measures the free memory after creating its CUDA context (~0.5 GB) and
   # uses min(ASR_MAX_VRAM_GB, free) as its budget. The recognisers that can run on
   # the GPU take it in load order (the default model first) while they fit; the
