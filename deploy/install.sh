@@ -11,7 +11,9 @@
 #      нет, и регистрирует runtime nvidia в Docker;
 #   4. проверяет, что контейнер видит GPU;
 #   5. проверяет, что нужные порты свободны;
-#   6. показывает свободную видеопамять и сравнивает её с ASR_MAX_VRAM_GB.
+#   6. показывает свободную видеопамять и какие модели распознавания (ASR_MODELS)
+#      поместятся на GPU в пределах ASR_MAX_VRAM_GB;
+#   7. проверяет, хватит ли оперативной памяти моделям распознавания на CPU.
 # Существующие контейнеры (например, vLLM) скрипт не трогает: он не
 # останавливает и не перенастраивает их и не перезапускает Docker, пока они
 # работают, без live-restore и вашего согласия.
@@ -32,6 +34,27 @@ CUDA128_DRIVER_VERSION=570
 MIN_COMPOSE_VERSION=2.24.0
 MIN_BUILDX_VERSION=0.17.0                         # required by "docker compose build"
 MIN_DISK_GB=30
+
+# Recognition models of asr (asr/asr_service/registry.py) and their parts: the
+# recogniser first ("-punct" shares the one of gigaam-multilingual), then the
+# punctuation model. VRAM: recognisers that can run on the GPU (estimates,
+# ASR_VRAM_GB_<ID> in deploy/.env). RAM: each part on the CPU (measured, peak while
+# loading for the punctuation model, asr/README.md).
+RECOGNITION_MODELS=(gigaam-v3 parakeet-v3 gigaam-multilingual gigaam-multilingual-punct)
+declare -A MODEL_PARTS=(
+  [gigaam-v3]=gigaam-v3
+  [parakeet-v3]=parakeet-v3
+  [gigaam-multilingual]=gigaam-multilingual
+  [gigaam-multilingual-punct]="gigaam-multilingual punctuation"
+)
+declare -A PART_VRAM_KEY=(
+  [gigaam-v3]=ASR_VRAM_GB_GIGAAM_V3
+  [gigaam-multilingual]=ASR_VRAM_GB_GIGAAM_MULTILINGUAL
+)
+declare -A PART_VRAM_GB=([gigaam-v3]=1.5 [gigaam-multilingual]=3.0)
+declare -A PART_RAM_GB=([gigaam-v3]=0.5 [parakeet-v3]=2.7 [gigaam-multilingual]=1.1 [punctuation]=1.8)
+RAM_RESERVE_GB=2 # free RAM wanted on top of the models
+ENABLED_MODELS=() # enabled models, in the order asr loads them
 
 PROBLEMS=()  # blocking issues
 TODO=()      # what is left for the user
@@ -63,6 +86,26 @@ ask_yes() {
   [[ $answer == [yYдД]* ]]
 }
 
+# setting KEY DEFAULT: KEY of deploy/.env, else of .env.example, else DEFAULT
+setting() {
+  local value
+  value=$(env_get "$FM_ENV_FILE" "$1")
+  [[ -n $value ]] || value=$(env_get "$FM_ENV_EXAMPLE" "$1")
+  printf '%s' "${value:-$2}"
+}
+
+# join_list ITEMS...: "a, b, c"
+join_list() {
+  local out
+  out=$(printf '%s, ' "$@")
+  printf '%s' "${out%, }"
+}
+
+# gb_floor X: X GB rounded down to 0.1 for messages (never more than there is)
+gb_floor() {
+  awk -v x="$1" 'BEGIN { printf "%.1f", int(x * 10 + 1e-6) / 10 }'
+}
+
 # ---------------------------------------------------------------------------
 check_nvidia_driver() {
   step "1. Драйвер NVIDIA"
@@ -76,7 +119,7 @@ check_nvidia_driver() {
   driver=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1)
   nvidia-smi -L | while IFS= read -r line; do ok "$line"; done
   if ! version_ge "$driver" "$MIN_DRIVER_VERSION"; then
-    PROBLEMS+=("драйвер NVIDIA $driver ниже $MIN_DRIVER_VERSION: asr (CUDA 12.8) на нём не запустится")
+    PROBLEMS+=("драйвер NVIDIA $driver ниже $MIN_DRIVER_VERSION: asr (CUDA 12.8) не сможет использовать GPU, все модели распознавания будут работать на CPU")
     fail "драйвер $driver: нужен $MIN_DRIVER_VERSION или новее (CUDA 12.x), рекомендуется $CUDA128_DRIVER_VERSION+"
   elif ! version_ge "$driver" "$CUDA128_DRIVER_VERSION"; then
     WARNINGS+=("драйвер NVIDIA $driver ниже $CUDA128_DRIVER_VERSION: asr полагается на совместимость минорных версий CUDA и на таком драйвере не проверялся")
@@ -84,7 +127,7 @@ check_nvidia_driver() {
     note "asr (torch с CUDA 12.8) должен работать через совместимость минорных версий CUDA"
     note "(CUDA minor version compatibility, драйвер $MIN_DRIVER_VERSION+), но на драйверах"
     note "ниже $CUDA128_DRIVER_VERSION не проверялся. Обновлять драйвер ради asr не обязательно"
-    note "(обновление остановит vLLM). Если asr не запустится, смотрите журнал asr и"
+    note "(обновление остановит vLLM). Если asr не сможет использовать GPU, смотрите журнал asr и"
     note "раздел «Если что-то не работает» в $FM_DEPLOY_DIR/README.md."
   else
     ok "драйвер $driver"
@@ -435,9 +478,8 @@ vllm_utilization() {
 show_vram() {
   step "6. Видеопамять"
   local need line total_mib free_mib
-  need=$(env_get "$FM_ENV_FILE" ASR_MAX_VRAM_GB)
-  [[ -n $need ]] || need=$(env_get "$FM_ENV_EXAMPLE" ASR_MAX_VRAM_GB)
-  need=${need:-4}
+  need=$(setting ASR_MAX_VRAM_GB 4)
+  load_asr_models
 
   nvidia-smi --query-gpu=index,name,memory.total,memory.used,memory.free \
     --format=csv,noheader,nounits | while IFS=, read -r idx gname total used free; do
@@ -460,31 +502,61 @@ show_vram() {
   fi
 
   # asr measures the free memory after creating its CUDA context (~0.5 GB) and
-  # uses min(ASR_MAX_VRAM_GB, free) as its budget: large_ctc if it fits, ctc otherwise.
-  local large small budget
-  large=$(env_get "$FM_ENV_FILE" ASR_MODEL_VRAM_GB)
-  [[ -n $large ]] || large=$(env_get "$FM_ENV_EXAMPLE" ASR_MODEL_VRAM_GB)
-  large=${large:-3.0}
-  small=$(env_get "$FM_ENV_FILE" ASR_FALLBACK_VRAM_GB)
-  [[ -n $small ]] || small=$(env_get "$FM_ENV_EXAMPLE" ASR_FALLBACK_VRAM_GB)
-  small=${small:-1.5}
-  budget=$(awk -v f="$free_mib" -v n="$need" 'BEGIN { b = f / 1024 - 0.5; if (b > n) b = n; printf "%.1f", b }')
-  if awk -v b="$budget" -v l="$large" 'BEGIN { exit !(b >= l) }'; then
-    ok "asr получит около $budget ГБ (ASR_MAX_VRAM_GB=$need, свободно минус ~0.5 ГБ на CUDA): хватает на large_ctc (~$large ГБ)"
+  # uses min(ASR_MAX_VRAM_GB, free) as its budget. The recognisers that can run on
+  # the GPU take it in load order (the default model first) while they fit; the
+  # others run on the CPU.
+  local budget left model rec vram first='' first_vram='' on_gpu=() on_cpu=()
+  local -A device=()
+  budget=$(awk -v f="$free_mib" -v n="$need" 'BEGIN { b = f / 1024 - 0.5; if (b > n) b = n; if (b < 0) b = 0; printf "%.3f", b }')
+  ok "asr получит около $(gb_floor "$budget") ГБ (ASR_MAX_VRAM_GB=$need, свободно минус ~0.5 ГБ на контекст CUDA)"
+  left=$budget
+  for model in "${ENABLED_MODELS[@]}"; do
+    rec=${MODEL_PARTS[$model]%% *}
+    if [[ -z ${device[$rec]:-} ]]; then
+      device[$rec]=cpu
+      if [[ -n ${PART_VRAM_KEY[$rec]:-} ]]; then
+        vram=$(setting "${PART_VRAM_KEY[$rec]}" "${PART_VRAM_GB[$rec]}")
+        if [[ -z $first ]]; then
+          first=$rec
+          first_vram=$vram
+        fi
+        if awk -v l="$left" -v v="$vram" 'BEGIN { exit !(l >= v) }'; then
+          device[$rec]=gpu
+          left=$(awk -v l="$left" -v v="$vram" 'BEGIN { printf "%.3f", l - v }')
+        elif [[ $rec != "$first" ]]; then
+          note "$rec (~$vram ГБ) не помещается в оставшиеся ~$(gb_floor "$left") ГБ: работает на CPU"
+        fi
+      fi
+    fi
+    if [[ ${device[$rec]} == gpu ]]; then on_gpu+=("$model"); else on_cpu+=("$model"); fi
+  done
+
+  if ((${#on_gpu[@]} > 0)); then ok "на GPU: $(join_list "${on_gpu[@]}")"; fi
+  if ((${#on_cpu[@]} > 0)); then ok "на CPU: $(join_list "${on_cpu[@]}")"; fi
+  if [[ -z $first ]]; then
+    note "Включённым моделям (ASR_MODELS) GPU не нужна."
     return
   fi
-  if awk -v b="$budget" -v s="$small" 'BEGIN { exit !(b >= s) }'; then
-    warn "asr получит около $budget ГБ: на large_ctc (~$large ГБ) не хватает, asr сам загрузит ctc (~$small ГБ)"
-    note "Распознавание будет работать, но с чуть большим числом ошибок. Для large_ctc"
-    note "освободите ещё $(awk -v b="$budget" -v l="$large" 'BEGIN{printf "%.1f", l - b}') ГБ видеопамяти (другие процессы на GPU, см. список выше)."
-    return
+  [[ ${device[$first]} == cpu ]] || return 0
+
+  if ((${#on_gpu[@]} == 0)); then
+    warn "на $first (~$first_vram ГБ) видеопамяти не хватает: все модели будут работать на CPU"
+  else
+    warn "на $first (~$first_vram ГБ) видеопамяти не хватает: она будет работать на CPU"
   fi
-  local missing
-  missing=$(awk -v b="$budget" -v s="$small" 'BEGIN{printf "%.1f", s - b}')
-  warn "asr получит около $budget ГБ: не хватает даже на ctc (~$small ГБ), asr не запустится"
+  note "Распознавание работает и так, но медленнее, и CPU нагружен сильнее."
+  WARNINGS+=("видеопамяти не хватает на $first: asr распознаёт на CPU (см. раздел 6 выше)")
+  local missing todo="Чтобы $first работала на GPU,"
+  if awk -v n="$need" -v v="$first_vram" 'BEGIN { exit !(n < v) }'; then
+    note "$todo увеличьте ASR_MAX_VRAM_GB в $FM_ENV_FILE хотя бы до $first_vram."
+    todo="Кроме того,"
+  fi
+  # rounded up to 0.1, so that freeing this much is enough
+  missing=$(awk -v f="$free_mib" -v v="$first_vram" 'BEGIN { m = v - (f / 1024 - 0.5); printf "%.1f", (m > 0 ? int(m * 10 + 0.999999) / 10 : 0) }')
+  awk -v m="$missing" 'BEGIN { exit !(m > 0) }' || return 0
   local util_info util who
   util_info=$(vllm_utilization)
-  note "Освободите на GPU ещё $missing ГБ:"
+  note "$todo освободите ещё $missing ГБ:"
   if [[ -n $util_info ]]; then
     util=${util_info%% *}
     who=${util_info#* }
@@ -493,17 +565,103 @@ show_vram() {
   fi
   note "- или остановить/уменьшить другие процессы на GPU из списка выше."
   note "install.sh сам ничего на GPU не меняет."
-  TODO+=("освободить $missing ГБ видеопамяти для asr (см. раздел 6 выше)")
+}
+
+# ---------------------------------------------------------------------------
+# load_asr_models: ASR_MODELS in the order asr loads them (ASR_DEFAULT_MODEL
+# first) into ENABLED_MODELS; ids that asr would reject are recorded as problems.
+load_asr_models() {
+  local raw default item items=() models=() known=" ${RECOGNITION_MODELS[*]} "
+  raw=$(setting ASR_MODELS "$(IFS=,; printf '%s' "${RECOGNITION_MODELS[*]}")")
+  default=$(setting ASR_DEFAULT_MODEL gigaam-v3)
+  read -r default <<<"${default,,}" # trim
+  IFS=, read -r -a items <<<"${raw,,}"
+  for item in "${items[@]}"; do
+    read -r item <<<"$item" # trim
+    [[ -n $item ]] || continue
+    if [[ $known != *" $item "* ]]; then
+      fail "ASR_MODELS: неизвестная модель $item (есть: $(join_list "${RECOGNITION_MODELS[@]}"))"
+      PROBLEMS+=("ASR_MODELS: неизвестная модель $item, asr не запустится")
+      continue
+    fi
+    if [[ " ${models[*]} " == *" $item "* ]]; then
+      fail "ASR_MODELS: модель $item указана дважды"
+      PROBLEMS+=("ASR_MODELS: модель $item указана дважды, asr не запустится")
+      continue
+    fi
+    models+=("$item")
+  done
+  ENABLED_MODELS=("${models[@]}")
+  if [[ " ${models[*]} " != *" $default "* ]]; then
+    fail "ASR_DEFAULT_MODEL=$default не входит в ASR_MODELS"
+    PROBLEMS+=("ASR_DEFAULT_MODEL=$default не входит в ASR_MODELS, asr не запустится")
+    return
+  fi
+  ENABLED_MODELS=("$default")
+  for item in "${models[@]}"; do
+    [[ $item == "$default" ]] || ENABLED_MODELS+=("$item")
+  done
+}
+
+# ---------------------------------------------------------------------------
+check_ram() {
+  step "7. Оперативная память"
+  local avail_kb avail asr_id asr_gb model part sizes=() need want sizes_info=()
+  local -A counted=()
+  avail_kb=$(awk '$1 == "MemAvailable:" { print $2 }' /proc/meminfo)
+  avail=$(awk -v k="${avail_kb:-0}" 'BEGIN { printf "%.1f", k / 1024 / 1024 }')
+
+  # A running asr already holds its models: count its memory as available
+  asr_id=$(docker ps -q --filter "name=^${FM_PROJECT}-asr-" 2>/dev/null | head -n 1 || true)
+  if [[ -n $asr_id ]]; then
+    # "1.5GiB / 15.6GiB" -> 1.5
+    asr_gb=$(docker stats --no-stream --format '{{.MemUsage}}' "$asr_id" 2>/dev/null | awk '
+      NR == 1 {
+        n = $1 + 0; u = $1; sub(/^[0-9.]+/, "", u); f = 1 / 1024 / 1024 / 1024
+        if (u ~ /^[kK]/) f = 1 / 1024 / 1024; else if (u ~ /^M/) f = 1 / 1024
+        else if (u ~ /^G/) f = 1; else if (u ~ /^T/) f = 1024
+        printf "%.1f", n * f
+      }' || true)
+    asr_gb=${asr_gb:-0}
+    avail=$(awk -v a="$avail" -v u="$asr_gb" 'BEGIN { printf "%.1f", a + u }')
+    note "контейнер ${FM_PROJECT}-asr уже работает: его $asr_gb ГБ считаются доступными."
+  fi
+
+  for model in "${ENABLED_MODELS[@]}"; do
+    for part in ${MODEL_PARTS[$model]}; do
+      [[ -z ${counted[$part]:-} ]] || continue
+      counted[$part]=1
+      sizes+=("${PART_RAM_GB[$part]}")
+    done
+  done
+  need=$(printf '%s\n' "${sizes[@]}" 0 | awk '{ s += $1 } END { printf "%.1f", s }')
+  want=$(awk -v n="$need" -v r="$RAM_RESERVE_GB" 'BEGIN { printf "%.1f", n + r }')
+  if awk -v a="$avail" -v w="$want" 'BEGIN { exit !(a >= w) }'; then
+    ok "доступно $avail ГБ: моделям распознавания на CPU нужно около $need ГБ (ASR_MODELS), запас есть"
+    return
+  fi
+  warn "доступно $avail ГБ, а моделям распознавания на CPU нужно около $need ГБ и ещё ~$RAM_RESERVE_GB ГБ запаса"
+  note "Иначе сервер может уйти в swap, а asr — завершиться из-за нехватки памяти."
+  for model in "${RECOGNITION_MODELS[@]}"; do
+    sizes=()
+    for part in ${MODEL_PARTS[$model]}; do sizes+=("${PART_RAM_GB[$part]}"); done
+    sizes_info+=("$model ~$(join_list "${sizes[@]}" | sed 's/, / + /g') ГБ")
+  done
+  note "Уберите лишние модели из ASR_MODELS в $FM_ENV_FILE (по умолчанию включены все четыре):"
+  note "$(join_list "${sizes_info[@]}")"
+  note "(gigaam-multilingual и gigaam-multilingual-punct делят одну модель)."
+  [[ -f $FM_ENV_FILE ]] || note "Файл создаёт sudo $FM_DEPLOY_DIR/up.sh --env-only."
+  WARNINGS+=("мало оперативной памяти для моделей распознавания: доступно $avail ГБ, нужно около $want ГБ (см. раздел 7 выше)")
 }
 
 # ---------------------------------------------------------------------------
 check_host() {
-  step "7. Прочее"
+  step "8. Прочее"
   local avail_gb dir=/var/lib/docker
   [[ -d $dir ]] || dir=/
   avail_gb=$(df -Pk "$dir" | awk 'NR == 2 { printf "%d", $4 / 1024 / 1024 }')
   if ((avail_gb < MIN_DISK_GB)); then
-    warn "свободно на диске ($dir): $avail_gb ГБ; образы и модель займут около $MIN_DISK_GB ГБ"
+    warn "свободно на диске ($dir): $avail_gb ГБ; образы и модели займут около $MIN_DISK_GB ГБ"
   else
     ok "свободно на диске ($dir): $avail_gb ГБ"
   fi
@@ -514,7 +672,7 @@ check_host() {
     note "  sudo ufw allow 7881/tcp"
     note "  sudo ufw allow 7882/udp"
     note "  sudo ufw allow from 172.16.0.0/12 to any port 7880 proto tcp"
-    TODO+=("добавить правила ufw для LiveKit (см. раздел 7 выше)")
+    TODO+=("добавить правила ufw для LiveKit (см. раздел 8 выше)")
   else
     ok "ufw не включён"
   fi
@@ -534,6 +692,7 @@ ensure_toolkit
 check_gpu_in_docker
 check_ports
 show_vram
+check_ram
 check_host
 
 step "Итог"

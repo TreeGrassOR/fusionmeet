@@ -122,6 +122,9 @@ x-backend-env: &backend-env
   TRANSCRIPTION_S3_PREFIX: transcriptions
   TRANSCRIPTION_LANGUAGE: ru
   TRANSCRIPTION_LIST_URL: https://meet.${BASE_DOMAIN}/my-recordings
+  # Recognition models a room can choose from (GET /v1/models of the asr service)
+  TRANSCRIPTION_ASR_URL: http://asr:8000
+  TRANSCRIPTION_ASR_API_KEY: ${ASR_API_KEY}
   # Email: Django's console backend unless SMTP_HOST is set in deploy/.env
   DJANGO_EMAIL_BACKEND: django.core.mail.backends.${EMAIL_BACKEND_KIND:-console}.EmailBackend
   DJANGO_EMAIL_HOST: ${SMTP_HOST:-}
@@ -475,6 +478,8 @@ services:
       TRANSCRIPT_FINALIZE_GRACE_S: "5"
       TRANSCRIPT_TIMEZONE: ${TRANSCRIPT_TIMEZONE:-Europe/Moscow}
       TRANSCRIPTION_HOOK_URL: https://meet.${BASE_DOMAIN}/api/v1.0/transcripts/agent-hook/
+      # Recognition model chosen for the room (sent to asr as ?model=)
+      TRANSCRIPTION_SETTINGS_URL: https://meet.${BASE_DOMAIN}/api/v1.0/transcripts/agent-settings/
       TRANSCRIPTION_AGENT_TOKEN: ${TRANSCRIPTION_AGENT_TOKEN}
 
   agents-metadata-collector:
@@ -486,8 +491,9 @@ services:
       METADATA_COLLECTOR_AGENT_NAME: metadata-collector
       AWS_S3_OUTPUT_FOLDER: metadata
 
-  # GigaAM speech recognition on the GPU. No published port: reachable only as
-  # http://asr:8000 on the compose network.
+  # Speech recognition with several selectable models (asr/README.md): the GigaAM
+  # models on the GPU while they fit in ASR_MAX_VRAM_GB, everything else on the
+  # CPU. No published port: reachable only as http://asr:8000 on the compose network.
   asr:
     image: fusionmeet/asr:local
     pull_policy: never
@@ -497,14 +503,13 @@ services:
     restart: unless-stopped
     environment:
       ASR_API_KEY: ${ASR_API_KEY}
-      ASR_MODEL_ID: ${ASR_MODEL_ID:-ai-sage/GigaAM-Multilingual}
-      ASR_MODEL_REVISION: ${ASR_MODEL_REVISION:-3905cd51c3ed4e88c8edf33f3302969ba480a327}
-      ASR_MODEL_VARIANT: ${ASR_MODEL_VARIANT:-large_ctc}
-      ASR_MODEL_VRAM_GB: ${ASR_MODEL_VRAM_GB:-3.0}
-      ASR_FALLBACK_REVISION: ${ASR_FALLBACK_REVISION:-2f8a57144e6ec3adfd32fe0484d9ea9913305bc8}
-      ASR_FALLBACK_VARIANT: ${ASR_FALLBACK_VARIANT:-ctc}
-      ASR_FALLBACK_VRAM_GB: ${ASR_FALLBACK_VRAM_GB:-1.5}
+      ASR_MODELS: ${ASR_MODELS:-gigaam-v3,parakeet-v3,gigaam-multilingual,gigaam-multilingual-punct}
+      ASR_DEFAULT_MODEL: ${ASR_DEFAULT_MODEL:-gigaam-v3}
+      # empty: half of the CPUs
+      ASR_CPU_THREADS: ${ASR_CPU_THREADS:-}
       ASR_MAX_VRAM_GB: ${ASR_MAX_VRAM_GB:-4}
+      ASR_VRAM_GB_GIGAAM_V3: ${ASR_VRAM_GB_GIGAAM_V3:-1.5}
+      ASR_VRAM_GB_GIGAAM_MULTILINGUAL: ${ASR_VRAM_GB_GIGAAM_MULTILINGUAL:-3.0}
       ASR_DEVICE: cuda
       ASR_FP16_ENCODER: ${ASR_FP16_ENCODER:-true}
       ASR_MAX_BATCH_SIZE: ${ASR_MAX_BATCH_SIZE:-8}
@@ -517,7 +522,8 @@ services:
       HF_HOME: /models
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     volumes:
-      # Hugging Face cache: the weights are downloaded once (about 2.3 GB)
+      # Hugging Face cache: the weights are downloaded once (about 5 GB for all
+      # the models)
       - asr-models:/models
     deploy:
       resources:
@@ -531,8 +537,9 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      # the first start downloads the weights (about 2.3 GB)
-      start_period: 3600s
+      # the first start downloads the weights (about 5 GB; /health answers once
+      # the default model is loaded, the others keep loading after it)
+      start_period: 7200s
     logging: *logging
 
 volumes:

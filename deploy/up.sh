@@ -10,7 +10,7 @@
 # Переменные окружения:
 #   ACME_EMAIL=...        email для Let's Encrypt без вопроса (первый запуск);
 #   UP_WAIT_TIMEOUT=3600  сколько секунд ждать healthcheck (первая загрузка
-#                         весов модели asr занимает время).
+#                         весов моделей asr занимает время).
 set -euo pipefail
 
 # shellcheck source=lib.sh
@@ -228,8 +228,8 @@ step "Сборка образов (frontend, backend, agents, asr)"
 fm_compose build
 
 step "Запуск и ожидание healthcheck всех сервисов"
-note "Первый запуск дольше: Keycloak собирает себя, asr скачивает веса модели (~2,3 ГБ)."
-note "Ход загрузки модели: sudo docker compose -f $FM_COMPOSE_FILE logs -f asr"
+note "Первый запуск дольше: Keycloak собирает себя, asr скачивает веса моделей распознавания (~5 ГБ)."
+note "Ход загрузки моделей: sudo docker compose -f $FM_COMPOSE_FILE logs -f asr"
 if ! fm_compose up --detach --wait --wait-timeout "${UP_WAIT_TIMEOUT:-3600}" --remove-orphans; then
   fm_compose ps --all || true
   die "не все сервисы прошли healthcheck. Журнал сервиса:
