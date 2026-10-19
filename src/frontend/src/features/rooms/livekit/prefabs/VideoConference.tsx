@@ -34,6 +34,7 @@ import { SyncDevicePreferences } from '@/features/rooms/livekit/components/SyncD
 import { RoomSilentMicDetector } from '@/features/rooms/components/SilentMicDetector'
 import { LowerHandOnSpeaking } from '@/features/rooms/livekit/components/LowerHandOnSpeaking'
 import { LobbyProvider } from '@/features/rooms/components/LobbyProvider'
+import { ParticipantAudioSynchronizer } from '@/features/participantAudio/components/ParticipantAudioSynchronizer'
 
 /**
  * @public
@@ -153,6 +154,7 @@ export function VideoConference({ ...props }: VideoConferenceProps) {
           </>
         )}
         <RoomAudioRenderer />
+        <ParticipantAudioSynchronizer />
         <ConnectionStateToast />
         <RecordingProvider />
         <TranscriptionProvider />

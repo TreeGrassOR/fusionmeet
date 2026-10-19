@@ -1,0 +1,16 @@
+{
+  "muteForMe": {
+    "ariaLabel": "Couper le son de {{name}} pour vous uniquement",
+    "label": "Couper le son pour moi"
+  },
+  "mutedForMeIndicator": "Son coupé pour vous",
+  "settingsFor": "Réglages du son de {{name}}",
+  "tileButton": "Volume de {{name}}",
+  "unmuteForMe": {
+    "ariaLabel": "Réactiver le son de {{name}} pour vous",
+    "label": "Réactiver le son pour moi"
+  },
+  "volume": {
+    "label": "Volume"
+  }
+}

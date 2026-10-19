@@ -3,6 +3,7 @@ import { RiMore2Fill } from '@remixicon/react'
 import { ParticipantMenu } from './ParticipantMenu'
 import type { Participant } from 'livekit-client'
 import { useTranslation } from 'react-i18next'
+import { ParticipantMenuVolumeSection } from '@/features/participantAudio/components/ParticipantMenuVolumeSection'
 
 export const ParticipantMenuButton = ({
   participant,
@@ -21,7 +22,13 @@ export const ParticipantMenuButton = ({
       >
         <RiMore2Fill />
       </Button>
-      <ParticipantMenu participant={participant} />
+      <>
+        <ParticipantMenu participant={participant} />
+        {/* outside of the react-aria menu: a slider is not a menu item */}
+        {!participant.isLocal && (
+          <ParticipantMenuVolumeSection participant={participant} />
+        )}
+      </>
     </Menu>
   )
 }

@@ -7,6 +7,7 @@ import { useCanMute } from '@/features/rooms/livekit/hooks/useCanMute'
 import { FocusButton } from './FocusButton'
 import { EffectsButton } from './EffectsButton'
 import { MuteButton } from './MuteButton'
+import { ParticipantVolumeButton } from '@/features/participantAudio/components/ParticipantVolumeButton'
 
 const MOUSE_IDLE_TIME = 3000
 
@@ -14,6 +15,8 @@ type FadeOverlayProps = {
   children: ReactNode
   hasKeyboardFocus: boolean
   tileRef: React.RefObject<HTMLDivElement | null>
+  // keeps the buttons mounted, e.g. while one of them has an open popover
+  forceVisible?: boolean
 }
 
 // Pointer-events none so this overlay doesn't block the zoom surface below.
@@ -24,6 +27,7 @@ const FadeOverlay = ({
   children,
   hasKeyboardFocus,
   tileRef,
+  forceVisible = false,
 }: FadeOverlayProps) => {
   const [active, setActive] = useState(false)
   const idleTimerRef = useRef<number | null>(null)
@@ -63,7 +67,7 @@ const FadeOverlay = ({
     }
   }, [tileRef])
 
-  const isVisible = hasKeyboardFocus || active
+  const isVisible = hasKeyboardFocus || active || forceVisible
 
   return (
     <div
@@ -99,9 +103,14 @@ export const ParticipantTileFocus = ({
   const isScreenShare = trackRef.source == Track.Source.ScreenShare
   const isLocal = participant.isLocal
   const canMute = useCanMute(participant)
+  const [isVolumeOpen, setIsVolumeOpen] = useState(false)
 
   return (
-    <FadeOverlay hasKeyboardFocus={hasKeyboardFocus} tileRef={tileRef}>
+    <FadeOverlay
+      hasKeyboardFocus={hasKeyboardFocus}
+      tileRef={tileRef}
+      forceVisible={isVolumeOpen}
+    >
       <div
         className={css({
           backgroundColor: 'primaryDark.50',
@@ -124,6 +133,12 @@ export const ParticipantTileFocus = ({
                 <EffectsButton />
               ) : (
                 canMute && <MuteButton participant={participant} />
+              )}
+              {!isLocal && (
+                <ParticipantVolumeButton
+                  participant={participant}
+                  onOpenChange={setIsVolumeOpen}
+                />
               )}
             </>
           )}

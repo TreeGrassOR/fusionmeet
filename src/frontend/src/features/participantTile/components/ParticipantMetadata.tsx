@@ -9,6 +9,7 @@ import { Participant } from 'livekit-client'
 import { MutedMicIndicator } from './MutedMicIndicator'
 import { ParticipantName } from './ParticipantName'
 import { RaisedHandMetadataWrapper } from './RaisedHandMetadataWrapper'
+import { MutedForMeIndicator } from '@/features/participantAudio/components/MutedForMeIndicator'
 
 export const ParticipantMetadata = ({
   displayedName,
@@ -25,6 +26,7 @@ export const ParticipantMetadata = ({
     <div className="lk-participant-metadata">
       <HStack gap={0.25}>
         {!isScreenShare && <MutedMicIndicator participant={participant} />}
+        {!isScreenShare && <MutedForMeIndicator participant={participant} />}
         <RaisedHandMetadataWrapper
           participant={participant}
           enabled={!isScreenShare}

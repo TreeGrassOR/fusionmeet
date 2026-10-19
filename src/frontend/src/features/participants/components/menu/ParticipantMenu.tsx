@@ -5,6 +5,7 @@ import { RemoveMenuItem } from './items/RemoveMenuItem'
 import { PromoteMenuItem } from './items/PromoteMenuItem'
 import { useIsAdminOrOwner } from '@/features/rooms/livekit/hooks/useIsAdminOrOwner'
 import { useParticipantAttributes } from '@livekit/components-react'
+import { MuteForMeMenuItem } from '@/features/participantAudio/components/MuteForMeMenuItem'
 
 export const ParticipantMenu = ({
   participant,
@@ -28,6 +29,7 @@ export const ParticipantMenu = ({
       }}
     >
       <PinMenuItem participant={participant} />
+      {!participant.isLocal && <MuteForMeMenuItem participant={participant} />}
       {canManage && (
         <RemoveMenuItem
           identity={participant.identity}

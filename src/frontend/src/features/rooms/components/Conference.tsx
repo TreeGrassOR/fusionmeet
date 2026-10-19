@@ -46,6 +46,7 @@ import { WatchMediaDeviceErrors } from './WatchMediaDeviceErrors'
 import { MeetDevtools } from '@/features/devtools'
 import { VOICE_AUDIO_CONSTRAINTS } from '@/features/rooms/livekit/utils/constants'
 import { resolveAudioOutputDeviceId } from '@/features/rooms/utils/resolveAudioOutputDeviceId'
+import { isVolumeBoostSupported } from '@/features/participantAudio/utils/volumeBoost'
 
 export const Conference = ({
   roomId,
@@ -126,6 +127,8 @@ export const Conference = ({
       audioOutput: {
         deviceId: resolveAudioOutputDeviceId(userConfig.audioOutputDeviceId),
       },
+      // allows participant volumes above 100 %, where output switching still works
+      webAudioMix: isVolumeBoostSupported(),
     }
     // do not rely on the userConfig object directly as its reference may change on every render
   }, [

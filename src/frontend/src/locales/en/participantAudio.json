@@ -1,0 +1,16 @@
+{
+  "muteForMe": {
+    "ariaLabel": "Mute {{name}} for you only",
+    "label": "Mute for me"
+  },
+  "mutedForMeIndicator": "Muted for you",
+  "settingsFor": "Sound settings for {{name}}",
+  "tileButton": "Volume of {{name}}",
+  "unmuteForMe": {
+    "ariaLabel": "Unmute {{name}} for you",
+    "label": "Unmute for me"
+  },
+  "volume": {
+    "label": "Volume"
+  }
+}
