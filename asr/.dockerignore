@@ -1,0 +1,14 @@
+# Only requirements.txt and asr_service/ are needed in the image.
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+.venv
+venv
+tests
+*.md
+requirements*.in
+requirements-dev.txt
+pyproject.toml
+Dockerfile
+.dockerignore

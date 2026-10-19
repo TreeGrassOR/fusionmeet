@@ -1,0 +1,12 @@
+# Unit tests and linting, without torch/transformers (the tests mock the model).
+# requirements-dev.txt is generated from this file (see the command at its top).
+-c requirements.txt
+
+fastapi
+uvicorn
+numpy
+
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1
+ruff==0.16.4
