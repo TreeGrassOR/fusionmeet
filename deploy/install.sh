@@ -106,7 +106,9 @@ install_docker() {
       >/etc/apt/sources.list.d/docker.list
     apt-get update
   fi
-  version=$(apt-cache madison docker-ce | awk -v m="5:$DOCKER_MAJOR." 'index($3, m) == 1 { print $3; exit }')
+  # No early "exit" in awk: apt-cache would get SIGPIPE, and with pipefail the
+  # assignment would silently end the script.
+  version=$(apt-cache madison docker-ce | awk -v m="5:$DOCKER_MAJOR." 'index($3, m) == 1 && !v { v = $3 } END { print v }')
   [[ -n $version ]] || die "в репозитории Docker нет версии $DOCKER_MAJOR.x для $ID $codename"
   apt_install "docker-ce=$version" "docker-ce-cli=$version" containerd.io \
     docker-buildx-plugin docker-compose-plugin
@@ -144,7 +146,7 @@ ensure_docker() {
   engine=$(docker version --format '{{.Server.Version}}')
   compose=$(docker compose version --short)
   # "github.com/docker/buildx v0.29.1 <commit>" -> v0.29.1
-  buildx=$(docker buildx version | awk '{ print $2; exit }')
+  buildx=$(docker buildx version | awk 'NR == 1 { print $2 }')
   ok "Docker Engine $engine"
   ok "Docker Compose $compose"
   ok "Docker Buildx $buildx"
