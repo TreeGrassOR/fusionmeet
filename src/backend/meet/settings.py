@@ -1119,6 +1119,18 @@ class Base(Configuration):
         environ_name="TRANSCRIPTION_STOPPING_TIMEOUT_SECONDS",
         environ_prefix=None,
     )
+    # ASR service that lists the recognition models a room can choose from
+    TRANSCRIPTION_ASR_URL = values.Value(
+        None, environ_name="TRANSCRIPTION_ASR_URL", environ_prefix=None
+    )
+    TRANSCRIPTION_ASR_API_KEY = SecretFileValue(
+        None, environ_name="TRANSCRIPTION_ASR_API_KEY", environ_prefix=None
+    )
+    TRANSCRIPTION_MODELS_CACHE_SECONDS = values.PositiveIntegerValue(
+        60,
+        environ_name="TRANSCRIPTION_MODELS_CACHE_SECONDS",
+        environ_prefix=None,
+    )
 
     # External Applications
     APPLICATION_ENABLED = values.BooleanValue(

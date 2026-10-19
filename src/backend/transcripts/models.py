@@ -105,6 +105,12 @@ class Transcript(BaseModel):
         max_length=255, null=True, blank=True, verbose_name=_("Agent dispatch ID")
     )
     error = models.TextField(blank=True, default="", verbose_name=_("Error"))
+    asr_models = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Recognition models"),
+        help_text=_("Ids of the ASR models that recognized the phrases."),
+    )
 
     class Meta:
         db_table = "meet_transcript"
@@ -187,6 +193,57 @@ class Transcript(BaseModel):
             ),
             "sig": sign_room_transcript(str(self.room_id), self.id),
         }
+
+
+class RoomTranscriptionSettings(models.Model):
+    """Transcription settings of a room, set by the users who can transcribe it.
+
+    A room without settings, or with an empty `asr_model`, uses the default
+    model of the ASR service.
+    """
+
+    room = models.OneToOneField(
+        Room,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="transcription_settings",
+        verbose_name=_("Room"),
+    )
+    asr_model = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("Recognition model"),
+        help_text=_("Id of the ASR model; empty for the default model."),
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name=_("Updated by"),
+    )
+    created_at = models.DateTimeField(
+        verbose_name=_("created on"),
+        help_text=_("date and time at which a record was created"),
+        auto_now_add=True,
+        editable=False,
+    )
+    updated_at = models.DateTimeField(
+        verbose_name=_("updated on"),
+        help_text=_("date and time at which a record was last updated"),
+        auto_now=True,
+        editable=False,
+    )
+
+    class Meta:
+        db_table = "meet_room_transcription_settings"
+        verbose_name = _("Room transcription settings")
+        verbose_name_plural = _("Room transcription settings")
+
+    def __str__(self):
+        return f"Transcription settings of room {self.room_id}"
 
 
 def sign_room_transcript(room_name: str, transcript_id) -> str:

@@ -1,5 +1,6 @@
 """API endpoints of the transcripts application."""
 
+import uuid
 from logging import getLogger
 
 from django.conf import settings
@@ -35,9 +36,9 @@ from core.api.permissions import CanManageRecording
 from core.api.viewsets import Pagination
 from core.models import Room
 
-from . import serializers, services
+from . import asr, serializers, services
 from .authentication import TranscriptionAgentAuthentication
-from .models import Transcript, TranscriptFormat
+from .models import RoomTranscriptionSettings, Transcript, TranscriptFormat
 
 logger = getLogger(__name__)
 
@@ -47,8 +48,35 @@ DOWNLOAD_CONTENT_TYPES = {
 }
 
 
+class AsrModelsUnavailable(drf_exceptions.APIException):
+    """The ASR service is not configured or cannot list its models."""
+
+    status_code = drf_status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "The recognition models are unavailable."
+    default_code = "asr_models_unavailable"
+
+
+class TranscriptionModelsView(views.APIView):
+    """List the recognition models a room can choose, as the ASR service does."""
+
+    permission_classes = [drf_permissions.IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        """Hide the endpoint when the transcription is disabled."""
+        if not settings.TRANSCRIPTION_ENABLED:
+            raise Http404
+        super().initial(request, *args, **kwargs)
+
+    def get(self, request):  # pylint: disable=unused-argument
+        """Return the `/v1/models` payload of the ASR service (cached)."""
+        try:
+            return drf_response.Response(asr.get_models())
+        except asr.AsrModelsUnavailableError as e:
+            raise AsrModelsUnavailable() from e
+
+
 class RoomTranscriptionViewSet(viewsets.GenericViewSet):
-    """Start and stop the transcription of a room.
+    """Start and stop the transcription of a room, and choose its model.
 
     Same rules as the recording: room owners and administrators, plus the
     authenticated participants present in an open room when
@@ -115,6 +143,38 @@ class RoomTranscriptionViewSet(viewsets.GenericViewSet):
             )
 
         return drf_response.Response(self.get_serializer(transcript).data)
+
+    def retrieve_settings(self, request, pk=None):  # pylint: disable=unused-argument
+        """Return the recognition model of the room, null for the default one."""
+        room = self.get_object()
+        model_id = (
+            RoomTranscriptionSettings.objects.filter(room=room)
+            .values_list("asr_model", flat=True)
+            .first()
+        )
+        return drf_response.Response({"asr_model": model_id or None})
+
+    def update_settings(self, request, pk=None):  # pylint: disable=unused-argument
+        """Choose the recognition model of the room; null resets to the default.
+
+        The agent reads it again within seconds: the next phrases use it.
+        """
+        room = self.get_object()
+        serializer = serializers.RoomTranscriptionSettingsSerializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except asr.AsrModelsUnavailableError as e:
+            raise AsrModelsUnavailable() from e
+
+        model_id = serializer.validated_data["asr_model"]
+        RoomTranscriptionSettings.objects.update_or_create(
+            room=room,
+            defaults={"asr_model": model_id or "", "updated_by": request.user},
+        )
+        logger.info(
+            "Recognition model of room %s set to %s", room.id, model_id or "default"
+        )
+        return drf_response.Response({"asr_model": model_id})
 
 
 class DownloadContentNegotiation(negotiation.DefaultContentNegotiation):
@@ -200,11 +260,11 @@ class TranscriptViewSet(
         )
 
 
-class TranscriptAgentHookView(views.APIView):
-    """Receive the result of a transcription from the transcriber agent.
+class TranscriptAgentView(views.APIView):
+    """Base of the endpoints called by the transcriber agent.
 
-    Authenticated with the TRANSCRIPTION_AGENT_TOKEN Bearer token; the endpoint
-    does not exist when no token is configured.
+    Authenticated with the TRANSCRIPTION_AGENT_TOKEN Bearer token; the endpoints
+    do not exist when no token is configured.
     """
 
     authentication_classes = [TranscriptionAgentAuthentication]
@@ -215,6 +275,25 @@ class TranscriptAgentHookView(views.APIView):
         if not settings.TRANSCRIPTION_AGENT_TOKEN:
             raise Http404
         super().initial(request, *args, **kwargs)
+
+
+class TranscriptAgentSettingsView(TranscriptAgentView):
+    """Tell the transcriber agent which recognition model to use in a room."""
+
+    def get(self, request):
+        """Return the model of ?room=<room id>, null for the default one."""
+        try:
+            room_id = uuid.UUID(request.query_params.get("room", ""))
+        except ValueError as e:
+            raise drf_exceptions.ValidationError(
+                {"room": "Must be the id of a room."}
+            ) from e
+
+        return drf_response.Response({"asr_model": asr.get_room_asr_model(room_id)})
+
+
+class TranscriptAgentHookView(TranscriptAgentView):
+    """Receive the result of a transcription from the transcriber agent."""
 
     def post(self, request):
         """Mark the transcript as ready or failed, then notify its initiator."""

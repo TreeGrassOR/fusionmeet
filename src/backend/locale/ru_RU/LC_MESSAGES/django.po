@@ -829,9 +829,33 @@ msgstr "ID запуска агента"
 msgid "Error"
 msgstr "Ошибка"
 
+#: transcripts/models.py:111
+msgid "Recognition models"
+msgstr "Модели распознавания"
+
+#: transcripts/models.py:112
+msgid "Ids of the ASR models that recognized the phrases."
+msgstr "ID моделей распознавания, которыми распознаны фразы."
+
 #: transcripts/models.py:110
 msgid "Transcript"
 msgstr "Расшифровка"
+
+#: transcripts/models.py:216
+msgid "Recognition model"
+msgstr "Модель распознавания"
+
+#: transcripts/models.py:217
+msgid "Id of the ASR model; empty for the default model."
+msgstr "ID модели распознавания. Если пусто, используется модель по умолчанию."
+
+#: transcripts/models.py:225
+msgid "Updated by"
+msgstr "Кем изменено"
+
+#: transcripts/models.py:242 transcripts/models.py:243
+msgid "Room transcription settings"
+msgstr "Настройки расшифровки комнаты"
 
 #: transcripts/services.py:391
 msgid "Your transcript is ready"

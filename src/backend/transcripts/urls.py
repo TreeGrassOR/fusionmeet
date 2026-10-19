@@ -25,11 +25,29 @@ urlpatterns = [
                     views.RoomTranscriptionViewSet.as_view({"post": "stop"}),
                     name="rooms-stop-transcription",
                 ),
-                # Before the router: "agent-hook" would match a transcript id
+                path(
+                    "rooms/<uuid:pk>/transcription-settings/",
+                    views.RoomTranscriptionViewSet.as_view(
+                        {"get": "retrieve_settings", "put": "update_settings"}
+                    ),
+                    name="rooms-transcription-settings",
+                ),
+                path(
+                    "transcription/models/",
+                    views.TranscriptionModelsView.as_view(),
+                    name="transcription-models",
+                ),
+                # Before the router: "agent-hook" and "agent-settings" would match a
+                # transcript id
                 path(
                     "transcripts/agent-hook/",
                     views.TranscriptAgentHookView.as_view(),
                     name="transcripts-agent-hook",
+                ),
+                path(
+                    "transcripts/agent-settings/",
+                    views.TranscriptAgentSettingsView.as_view(),
+                    name="transcripts-agent-settings",
                 ),
                 *router.urls,
             ]

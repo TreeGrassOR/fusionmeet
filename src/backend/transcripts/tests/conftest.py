@@ -2,17 +2,28 @@
 
 # pylint: disable=redefined-outer-name,no-name-in-module
 
+import copy
 import json
+import os
 from dataclasses import dataclass, field
 from unittest import mock
 
+from django.core.cache import cache
 from django.utils import timezone
 
 import pytest
+import responses
 from livekit.api import AgentDispatch, ListRoomsResponse
 from livekit.api import Room as LiveKitRoom
 
-from transcripts.tests.utils import AGENT_TOKEN
+from transcripts.asr import CACHE_KEY as ASR_MODELS_CACHE_KEY
+from transcripts.tests.utils import (
+    AGENT_TOKEN,
+    ASR_API_KEY,
+    ASR_MODELS_PAYLOAD,
+    ASR_MODELS_URL,
+    ASR_URL,
+)
 
 
 @dataclass
@@ -87,3 +98,35 @@ def agent_token(settings):
     """Configure the agent hook token."""
     settings.TRANSCRIPTION_AGENT_TOKEN = AGENT_TOKEN
     return AGENT_TOKEN
+
+
+@pytest.fixture(autouse=True)
+def clear_asr_models_cache(settings):
+    """Start and end each test without a cached list of ASR models.
+
+    The list is cached under a single key: each pytest-xdist worker gets its own
+    key prefix, so that parallel tests sharing the Redis cache do not see the
+    list cached by another one.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+    settings.CACHES = {
+        **settings.CACHES,
+        "default": {**settings.CACHES["default"], "KEY_PREFIX": f"test-{worker}"},
+    }
+    cache.delete(ASR_MODELS_CACHE_KEY)
+    yield
+    cache.delete(ASR_MODELS_CACHE_KEY)
+
+
+@pytest.fixture
+def asr_service(settings):
+    """Configure the ASR service and mock its `GET /v1/models` endpoint.
+
+    Yields the `responses` mock: tests can replace the endpoint answer or count
+    the calls. Any other HTTP request made with `requests` fails.
+    """
+    settings.TRANSCRIPTION_ASR_URL = ASR_URL
+    settings.TRANSCRIPTION_ASR_API_KEY = ASR_API_KEY
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as mocked:
+        mocked.get(ASR_MODELS_URL, json=copy.deepcopy(ASR_MODELS_PAYLOAD))
+        yield mocked

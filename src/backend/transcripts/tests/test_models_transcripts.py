@@ -15,6 +15,7 @@ from core.models import RoleChoices
 
 from transcripts.factories import TranscriptFactory
 from transcripts.models import (
+    RoomTranscriptionSettings,
     Transcript,
     TranscriptStatusChoices,
     format_timestamp,
@@ -49,6 +50,47 @@ def test_models_transcript_room_cascade():
     room.delete()
 
     assert Transcript.objects.count() == 0
+
+
+def test_models_transcript_asr_models_default():
+    """A transcript lists no recognition model until the agent reports them."""
+    assert TranscriptFactory().asr_models == []
+
+
+def test_models_room_transcription_settings_one_per_room():
+    """The settings of a room are keyed by the room."""
+    room = RoomFactory()
+    RoomTranscriptionSettings.objects.create(room=room, asr_model="gigaam-v3")
+
+    assert room.transcription_settings.asr_model == "gigaam-v3"
+    assert RoomTranscriptionSettings.objects.get().pk == room.pk
+    with pytest.raises(ValidationError):
+        RoomTranscriptionSettings(room=room, asr_model="parakeet-v3").validate_unique()
+
+
+def test_models_room_transcription_settings_room_cascade():
+    """The settings are deleted with their room."""
+    room = RoomFactory()
+    RoomTranscriptionSettings.objects.create(room=room, asr_model="gigaam-v3")
+
+    room.delete()
+
+    assert RoomTranscriptionSettings.objects.count() == 0
+
+
+def test_models_room_transcription_settings_updated_by_deleted():
+    """The settings are kept when the user who changed them is deleted."""
+    user = UserFactory()
+    room = RoomFactory()
+    RoomTranscriptionSettings.objects.create(
+        room=room, asr_model="gigaam-v3", updated_by=user
+    )
+
+    user.delete()
+
+    room_settings = RoomTranscriptionSettings.objects.get()
+    assert room_settings.updated_by is None
+    assert room_settings.asr_model == "gigaam-v3"
 
 
 def test_models_transcript_grant_initial_accesses():

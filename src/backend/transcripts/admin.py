@@ -34,6 +34,7 @@ class TranscriptAdmin(admin.ModelAdmin):
         "md_key",
         "dispatch_id",
         "error",
+        "asr_models",
     )
     search_fields = [
         "=id",

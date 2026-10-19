@@ -210,6 +210,7 @@ def test_start_transcription_success(transcription_enabled, livekit, role):
         "created_at": transcript.created_at.isoformat().replace("+00:00", "Z"),
         "participants": [],
         "segments_count": 0,
+        "models": [],
         "is_ready": False,
         "downloads": {"md": None, "json": None},
     }

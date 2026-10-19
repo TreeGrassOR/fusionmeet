@@ -419,6 +419,94 @@ def test_agent_hook_failed_after_ready_ignored(agent_token, livekit, email_mock)
     assert transcript.md_key is not None
 
 
+# Recognition models
+
+
+def test_agent_hook_models(agent_token, livekit, email_mock):
+    """The models that recognized the phrases are stored once, in order."""
+    transcript = TranscriptFactory()
+
+    response = post_hook(
+        ready_payload(
+            transcript, models=["gigaam-v3", "parakeet-v3", "gigaam-v3", "custom"]
+        )
+    )
+
+    assert response.status_code == 200
+    transcript.refresh_from_db()
+    assert transcript.asr_models == ["gigaam-v3", "parakeet-v3", "custom"]
+
+
+@pytest.mark.parametrize("models", [None, [], "missing"])
+def test_agent_hook_without_models(agent_token, livekit, email_mock, models):
+    """The models are optional: older agents do not report them."""
+    transcript = TranscriptFactory(asr_models=["gigaam-v3"])
+    payload = ready_payload(transcript, models=models)
+    if models == "missing":
+        del payload["models"]
+
+    response = post_hook(payload)
+
+    assert response.status_code == 200
+    transcript.refresh_from_db()
+    assert transcript.status == TranscriptStatusChoices.READY
+    assert transcript.asr_models == []
+
+
+def test_agent_hook_models_failed(agent_token, livekit, email_mock):
+    """The models are stored with a failed result too."""
+    transcript = TranscriptFactory()
+
+    response = post_hook(
+        {
+            "transcript_id": str(transcript.id),
+            "room_id": str(transcript.room_id),
+            "status": "failed",
+            "models": ["parakeet-v3"],
+        }
+    )
+
+    assert response.status_code == 200
+    transcript.refresh_from_db()
+    assert transcript.status == TranscriptStatusChoices.FAILED
+    assert transcript.asr_models == ["parakeet-v3"]
+
+
+@pytest.mark.parametrize(
+    "models",
+    ["gigaam-v3", [""], [None], ["a" * 65], [f"model-{i}" for i in range(21)]],
+)
+def test_agent_hook_invalid_models(agent_token, livekit, email_mock, models):
+    """Invalid model lists give a 400 before any side effect."""
+    transcript = TranscriptFactory()
+
+    response = post_hook(ready_payload(transcript, models=models))
+
+    assert response.status_code == 400
+    assert "models" in response.json()
+    transcript.refresh_from_db()
+    assert transcript.status == TranscriptStatusChoices.ACTIVE
+    assert transcript.asr_models == []
+    livekit.client.room.update_room_metadata.assert_not_called()
+
+
+def test_agent_hook_models_listed(agent_token, livekit, email_mock):
+    """The users of a transcript see the models in the list of transcripts."""
+    user = UserFactory()
+    transcript = TranscriptFactory(users=[user])
+    post_hook(ready_payload(transcript, models=["gigaam-v3", "parakeet-v3"]))
+    client = APIClient()
+    client.force_login(user)
+
+    response = client.get("/api/v1.0/transcripts/")
+
+    assert response.status_code == 200
+    [item] = response.json()["results"]
+    assert item["models"] == ["gigaam-v3", "parakeet-v3"]
+    response = client.get(f"/api/v1.0/transcripts/{transcript.id}/")
+    assert response.json()["models"] == ["gigaam-v3", "parakeet-v3"]
+
+
 # Email
 
 

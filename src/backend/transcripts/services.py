@@ -453,6 +453,7 @@ class TranscriptionService:
             locked.segments_count = data.get("segments_count") or 0
             locked.json_key = files.get("json") or None
             locked.md_key = files.get("md") or None
+            locked.asr_models = list(dict.fromkeys(data.get("models") or []))
             locked.error = (
                 ""
                 if new_status == TranscriptStatusChoices.READY
