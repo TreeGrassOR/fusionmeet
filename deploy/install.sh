@@ -278,7 +278,10 @@ check_gpu_in_docker() {
     ok "контейнер видит GPU ($GPU_TEST_IMAGE, nvidia-smi)"
     return
   fi
-  if [[ $GPU_TEST_ERROR != *"could not select device driver"* ]]; then
+  # Docker < 29 says "could not select device driver"; Docker 29 falls back to
+  # its AMD CDI driver and says "AMD CDI spec not found".
+  if [[ $GPU_TEST_ERROR != *"could not select device driver"* &&
+    $GPU_TEST_ERROR != *"AMD CDI spec not found"* ]]; then
     PROBLEMS+=("контейнер не видит GPU: $GPU_TEST_ERROR")
     fail "контейнер не видит GPU: $GPU_TEST_ERROR"
     return
