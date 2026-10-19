@@ -313,6 +313,10 @@
         "party-popper": "party popper",
         "folded-hands": "folded hands"
       }
+    },
+    "startMedia": {
+      "audio": "Start audio",
+      "video": "Start video"
     }
   },
   "pictureInPicture": {
@@ -868,5 +872,10 @@
   },
   "participantTile": {
     "screenShare": "{{name}}'s screen"
+  },
+  "connectionState": {
+    "connecting": "Connecting",
+    "reconnecting": "Reconnecting",
+    "disconnected": "Disconnected"
   }
 }

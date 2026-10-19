@@ -5,7 +5,7 @@ import { PipStage } from './layout/PipStage'
 import { ReactionsToolbar } from '@/features/reactions/components/toolbar/ReactionsToolbar'
 import { useReactionsToolbar } from '@/features/reactions/hooks/useReactionsToolbar'
 import { NotificationProvider } from '@/features/notifications/NotificationProvider'
-import { ConnectionStateToast } from '@livekit/components-react'
+import { ConnectionStateToast } from '@/features/rooms/livekit/components/ConnectionStateToast'
 
 const Container = styled('div', {
   base: {

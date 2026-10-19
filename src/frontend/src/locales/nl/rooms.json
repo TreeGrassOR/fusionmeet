@@ -313,6 +313,10 @@
         "party-popper": "feestknaller",
         "folded-hands": "gevouwen handen"
       }
+    },
+    "startMedia": {
+      "audio": "Audio inschakelen",
+      "video": "Video inschakelen"
     }
   },
   "pictureInPicture": {
@@ -868,5 +872,10 @@
   },
   "participantTile": {
     "screenShare": "{{name}} scherm"
+  },
+  "connectionState": {
+    "connecting": "Verbinden",
+    "reconnecting": "Opnieuw verbinden",
+    "disconnected": "Verbinding verbroken"
   }
 }

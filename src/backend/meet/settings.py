@@ -258,7 +258,7 @@ class Base(Configuration):
     # https://docs.djangoproject.com/en/3.1/topics/i18n/
 
     # Languages
-    LANGUAGE_CODE = values.Value("en-us")
+    LANGUAGE_CODE = values.Value("ru-ru")
 
     DRF_NESTED_MULTIPART_PARSER = {
         # output of parser is converted to querydict
@@ -270,6 +270,7 @@ class Base(Configuration):
     # fallback/default languages throughout the app.
     LANGUAGES = values.SingleNestedTupleValue(
         (
+            ("ru-ru", _("Russian")),
             ("en-us", _("English")),
             ("fr-fr", _("French")),
             ("nl-nl", _("Dutch")),
@@ -1659,6 +1660,9 @@ class Test(Base):
     ]
     USE_SWAGGER = True
     EXTERNAL_API_ENABLED = True
+
+    # Upstream tests assert English messages: pin them to en-us (default is ru-ru).
+    LANGUAGE_CODE = values.Value("en-us")
 
     LIVEKIT_CONFIGURATION = {
         "api_key": "devkey-padded-for-minimum-len!-livekit",

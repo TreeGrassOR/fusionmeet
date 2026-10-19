@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
 const languageLabels: Record<string, string> = {
+  ru: 'Русский',
   en: 'English',
   fr: 'Français',
   de: 'Deutsch',

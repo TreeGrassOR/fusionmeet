@@ -4,6 +4,7 @@ import {
   useStartVideo,
 } from '@livekit/components-react'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 
 /** @public */
 export interface AllowMediaPlaybackProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -31,6 +32,7 @@ export const StartMediaButton: (
   HTMLButtonElement,
   AllowMediaPlaybackProps
 >(function StartMediaButton({ label, ...props }: AllowMediaPlaybackProps, ref) {
+  const { t } = useTranslation('rooms', { keyPrefix: 'controls.startMedia' })
   const room = useRoomContext()
   const { mergedProps: audioProps, canPlayAudio } = useStartAudio({
     room,
@@ -45,7 +47,7 @@ export const StartMediaButton: (
 
   return (
     <button ref={ref} style={style} {...restProps}>
-      {label ?? `Start ${!canPlayAudio ? 'Audio' : 'Video'}`}
+      {label ?? (!canPlayAudio ? t('audio') : t('video'))}
     </button>
   )
 })

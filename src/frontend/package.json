@@ -12,6 +12,7 @@
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
     "i18n:extract": "npx i18next -c i18next-parser.config.json",
+    "i18n:check-ru": "node ../../bin/check-i18n-ru",
     "format": "prettier --write ./src",
     "check": "prettier --check ./src"
   },

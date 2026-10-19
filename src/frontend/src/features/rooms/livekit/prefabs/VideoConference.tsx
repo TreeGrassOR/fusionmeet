@@ -2,10 +2,8 @@ import { isWeb } from '@livekit/components-core'
 import { MediaDeviceFailure, Track } from 'livekit-client'
 import { getMediaDeviceFailure } from '../utils/mediaPermissions'
 import React, { useState } from 'react'
-import {
-  ConnectionStateToast,
-  RoomAudioRenderer,
-} from '@livekit/components-react'
+import { RoomAudioRenderer } from '@livekit/components-react'
+import { ConnectionStateToast } from '../components/ConnectionStateToast'
 
 import { ControlBar } from './ControlBar/ControlBar'
 import { SidePanel } from '../components/SidePanel'

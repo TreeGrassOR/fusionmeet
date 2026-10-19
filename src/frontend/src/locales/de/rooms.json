@@ -313,6 +313,10 @@
         "party-popper": "Konfettikanone",
         "folded-hands": "Gefaltete Hände"
       }
+    },
+    "startMedia": {
+      "audio": "Audio aktivieren",
+      "video": "Video aktivieren"
     }
   },
   "pictureInPicture": {
@@ -868,5 +872,10 @@
   },
   "participantTile": {
     "screenShare": "{{name}}’s Bildschirm"
+  },
+  "connectionState": {
+    "connecting": "Verbinden",
+    "reconnecting": "Erneut verbinden",
+    "disconnected": "Getrennt"
   }
 }

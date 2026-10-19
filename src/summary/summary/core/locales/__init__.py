@@ -3,10 +3,10 @@
 from typing import Optional
 
 from summary.core.config import get_settings
-from summary.core.locales import de, en, fr, nl
+from summary.core.locales import de, en, fr, nl, ru
 from summary.core.locales.strings import LocaleStrings
 
-_LOCALES = {"fr": fr, "en": en, "de": de, "nl": nl}
+_LOCALES = {"fr": fr, "en": en, "de": de, "nl": nl, "ru": ru}
 
 
 def get_locale(*languages: Optional[str]) -> LocaleStrings:

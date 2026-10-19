@@ -313,6 +313,10 @@
         "party-popper": "confeti",
         "folded-hands": "manos juntas"
       }
+    },
+    "startMedia": {
+      "audio": "Activar el audio",
+      "video": "Activar el vídeo"
     }
   },
   "pictureInPicture": {
@@ -863,5 +867,10 @@
   },
   "participantTile": {
     "screenShare": "Pantalla de {{name}}"
+  },
+  "connectionState": {
+    "connecting": "Conectando",
+    "reconnecting": "Reconectando",
+    "disconnected": "Desconectado"
   }
 }

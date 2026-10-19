@@ -1,0 +1,164 @@
+#!/usr/bin/env node
+/*
+ * Check that the Russian frontend locale has the same keys as the English one.
+ *
+ * Usage: bin/check-i18n-ru [LOCALES_DIR]
+ *   LOCALES_DIR defaults to src/frontend/src/locales (relative to the repository root).
+ *
+ * For every namespace file <ns>.json in en/ and ru/:
+ *   - leaf keys are compared after stripping i18next plural suffixes
+ *     (_zero/_one/_two/_few/_many/_other), so "count_one"/"count_other" in en
+ *     match "count_one"/"count_few"/"count_many"/"count_other" in ru;
+ *   - missing and extra keys are reported per file;
+ *   - every en plural base must have the ru forms _one, _few, _many and _other.
+ * Namespace files present in only one of the two folders are reported too.
+ *
+ * Exit code: 0 when everything matches, 1 on any mismatch, 2 on a usage error.
+ * Dependencies: Node.js standard library only.
+ */
+'use strict'
+
+const fs = require('fs')
+const path = require('path')
+
+const REF = 'en'
+const TARGET = 'ru'
+const TARGET_PLURAL_FORMS = ['one', 'few', 'many', 'other']
+const PLURAL_RE = /_(zero|one|two|few|many|other)$/
+
+const repoRoot = path.resolve(__dirname, '..')
+const localesDir = path.resolve(
+  process.argv[2] || path.join(repoRoot, 'src', 'frontend', 'src', 'locales')
+)
+
+const listNamespaces = (lng) => {
+  const dir = path.join(localesDir, lng)
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return null
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => f.slice(0, -'.json'.length))
+    .sort()
+}
+
+// Objects recurse; arrays, strings and other values are leaves.
+const flatten = (value, prefix, out) => {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    for (const key of Object.keys(value)) {
+      flatten(value[key], prefix ? `${prefix}.${key}` : key, out)
+    }
+  } else {
+    out.push(prefix)
+  }
+  return out
+}
+
+const readKeys = (lng, ns) => {
+  const file = path.join(localesDir, lng, `${ns}.json`)
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('top-level value is not a JSON object')
+  }
+  return flatten(data, '', [])
+}
+
+const baseOf = (key) => key.replace(PLURAL_RE, '')
+
+const main = () => {
+  const refNamespaces = listNamespaces(REF)
+  if (!refNamespaces) {
+    console.error(`error: reference folder not found: ${path.join(localesDir, REF)}`)
+    return 2
+  }
+  const targetNamespaces = listNamespaces(TARGET) || []
+
+  console.log(
+    `i18n key check: ${TARGET} vs ${REF} in ${path.relative(process.cwd(), localesDir) || '.'}`
+  )
+
+  let problems = 0
+  let failedFiles = 0
+
+  for (const ns of refNamespaces) {
+    const file = `${ns}.json`
+    let refKeys
+    try {
+      refKeys = readKeys(REF, ns)
+    } catch (e) {
+      console.log(`${REF}/${file}: cannot read reference file: ${e.message}`)
+      problems += 1
+      failedFiles += 1
+      continue
+    }
+    const refBases = new Set(refKeys.map(baseOf))
+    const refPluralBases = [
+      ...new Set(refKeys.filter((k) => PLURAL_RE.test(k)).map(baseOf)),
+    ]
+
+    if (!targetNamespaces.includes(ns)) {
+      console.log(
+        `${file}: MISSING namespace file ${TARGET}/${file} (${refBases.size} keys in ${REF})`
+      )
+      problems += 1
+      failedFiles += 1
+      continue
+    }
+
+    let targetKeys
+    try {
+      targetKeys = readKeys(TARGET, ns)
+    } catch (e) {
+      console.log(`${file}: cannot read ${TARGET}/${file}: ${e.message}`)
+      problems += 1
+      failedFiles += 1
+      continue
+    }
+    const targetKeySet = new Set(targetKeys)
+    const targetBases = new Set(targetKeys.map(baseOf))
+
+    const missing = [...refBases].filter((k) => !targetBases.has(k)).sort()
+    const extra = [...targetBases].filter((k) => !refBases.has(k)).sort()
+    const plural = []
+    for (const base of refPluralBases.sort()) {
+      if (!targetBases.has(base)) continue // already reported as missing
+      const absent = TARGET_PLURAL_FORMS.map((f) => `${base}_${f}`).filter(
+        (k) => !targetKeySet.has(k)
+      )
+      if (absent.length) plural.push({ base, absent })
+    }
+
+    const fileProblems = missing.length + extra.length + plural.length
+    if (!fileProblems) {
+      console.log(`${file}: OK (${refBases.size} keys)`)
+      continue
+    }
+    problems += fileProblems
+    failedFiles += 1
+    console.log(
+      `${file}: ${missing.length} missing, ${extra.length} extra, ` +
+        `${plural.length} plural key(s) without all ${TARGET} forms`
+    )
+    for (const k of missing) console.log(`  missing: ${k}`)
+    for (const k of extra) console.log(`  extra:   ${k}`)
+    for (const { base, absent } of plural) {
+      console.log(`  plural:  ${base} needs ${absent.join(', ')}`)
+    }
+  }
+
+  for (const ns of targetNamespaces) {
+    if (!refNamespaces.includes(ns)) {
+      console.log(`${ns}.json: EXTRA namespace file ${TARGET}/${ns}.json (no ${REF}/${ns}.json)`)
+      problems += 1
+      failedFiles += 1
+    }
+  }
+
+  if (problems) {
+    console.log(`FAILED: ${problems} problem(s) in ${failedFiles} file(s)`)
+    return 1
+  }
+  console.log(`OK: ${refNamespaces.length} namespace(s) match`)
+  return 0
+}
+
+process.exitCode = main()
