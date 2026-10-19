@@ -8,7 +8,9 @@
 # agents-transcriber). All other images are pinned to an exact tag.
 #
 # Network layout:
-# - caddy publishes 80/tcp, 443/tcp and 443/udp, gets Let's Encrypt certificates
+# - caddy publishes 80/tcp, 443/tcp and 443/udp (or, when an nginx of the host
+#   already owns 80/443, only 127.0.0.1 ports that this nginx forwards the three
+#   names to: PROXY_MODE in deploy/.env), gets Let's Encrypt certificates
 #   (HTTP-01) and proxies meet.<BASE_DOMAIN> -> frontend:8083,
 #   id.<BASE_DOMAIN> -> keycloak:8080, livekit.<BASE_DOMAIN> -> LiveKit on the host.
 #   Its network aliases make the three public names resolve to Caddy inside the
@@ -177,9 +179,11 @@ services:
     image: caddy:2.11.7
     restart: unless-stopped
     ports:
-      - "80:80/tcp"
-      - "443:443/tcp"
-      - "443:443/udp"
+      # 80/443 of the host, or 127.0.0.1-only ports behind the host nginx
+      # (CADDY_*_BIND are written to deploy/.env by up.sh, see PROXY_MODE)
+      - "${CADDY_HTTP_BIND:-80}:80/tcp"
+      - "${CADDY_HTTPS_BIND:-443}:443/tcp"
+      - "${CADDY_HTTP3_BIND:-443}:443/udp"
     environment:
       ACME_EMAIL: ${ACME_EMAIL}
       ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}

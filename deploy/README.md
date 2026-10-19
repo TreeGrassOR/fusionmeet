@@ -210,8 +210,11 @@ asr отключает эту проверку (`NVIDIA_DISABLE_REQUIRE=true` в
 
 ### Не хватает видеопамяти (asr)
 
-- `sudo ./deploy/install.sh` показывает свободную видеопамять, сколько не хватает
-  до `ASR_MAX_VRAM_GB` и текущее `--gpu-memory-utilization` у vLLM.
+- asr берёт `min(ASR_MAX_VRAM_GB, свободно)`. Свободную память он меряет уже после
+  создания своего контекста CUDA (около 0,5 ГБ). `sudo ./deploy/install.sh`
+  показывает этот бюджет и какая модель в него поместится: `large_ctc` около 3 ГБ,
+  `ctc` около 1,5 ГБ. Если `large_ctc` не помещается или падает с нехваткой памяти
+  на прогреве, asr сам переходит на `ctc`.
 - В журнале `asr` видно, какая модель загружена. Если на `large_ctc` не хватает
   памяти, asr сам загружает запасную `ctc` и пишет об этом предупреждение. Если не
   хватает и на неё, asr завершается с ошибкой, где указано, сколько памяти свободно
@@ -223,6 +226,22 @@ asr отключает эту проверку (`NVIDIA_DISABLE_REQUIRE=true` в
 - `docker: could not select device driver "nvidia"`: Docker запущен раньше, чем
   установлен NVIDIA Container Toolkit. Запустите `sudo ./deploy/install.sh`: он
   включит live-restore и предложит перезапустить Docker без остановки контейнеров.
+
+### Порты 80 и 443 заняты nginx сервера
+
+Ничего делать не нужно: при `PROXY_MODE=auto` (по умолчанию) `up.sh` видит nginx
+на 80/443 и встаёт за него (`PROXY_MODE=nginx` записывается в `deploy/.env`):
+
+- Caddy слушает только `127.0.0.1:18080` и `127.0.0.1:18443`
+  (`CADDY_LOCAL_HTTP_PORT`, `CADDY_LOCAL_HTTPS_PORT`).
+- `up.sh` кладёт в nginx файл `fusionmeet.conf` (в `conf.d` или `sites-available`).
+  Файл пересылает в Caddy только `meet.`, `id.` и `livekit.<BASE_DOMAIN>`, остальные
+  сайты nginx не меняются. Перед перезагрузкой nginx файл проверяется `nginx -t`, при
+  ошибке прежние настройки восстанавливаются.
+- Сертификаты Let's Encrypt получает и продлевает Caddy (HTTP-01 через порт 80 nginx).
+  nginx берёт их из тома Caddy и перечитывает раз в сутки
+  (`fusionmeet-nginx-reload.timer`).
+- HTTP/3 (443/udp) в этом режиме не используется.
 
 ### Сертификаты не выпускаются
 

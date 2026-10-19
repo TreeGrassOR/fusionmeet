@@ -15,6 +15,8 @@ set -euo pipefail
 
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck source=host-nginx.sh
+source "$(dirname "${BASH_SOURCE[0]}")/host-nginx.sh"
 
 ENV_ONLY=false
 for arg in "$@"; do
@@ -202,7 +204,24 @@ if ! docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q nvidia; the
 fi
 docker buildx version >/dev/null 2>&1 ||
   die "нет плагина docker buildx, без него образы не соберутся. Запустите: sudo $FM_DEPLOY_DIR/install.sh"
+
+step "Обратный прокси"
+hn_resolve_mode
 fm_compose config --quiet
+BASE_DOMAIN_VALUE=$(env_get "$FM_ENV_FILE" BASE_DOMAIN)
+HOSTS=("meet.$BASE_DOMAIN_VALUE" "id.$BASE_DOMAIN_VALUE" "livekit.$BASE_DOMAIN_VALUE")
+if [[ $HN_MODE == nginx ]]; then
+  hn_before_up "${HOSTS[@]}"
+else
+  # Back from PROXY_MODE=nginx: the forwarding of the host nginx is not needed
+  for path in "/etc/nginx/conf.d/$HN_CONF_NAME" "/etc/nginx/sites-enabled/$HN_CONF_NAME"; do
+    if [[ -e $path ]]; then
+      rm -f "$path" "/etc/nginx/sites-available/$HN_CONF_NAME"
+      nginx -t >/dev/null 2>&1 && systemctl reload nginx
+      ok "удалены настройки FusionMeet из nginx сервера"
+    fi
+  done
+fi
 
 step "Сборка образов (frontend, backend, agents, asr)"
 fm_compose build
@@ -215,6 +234,10 @@ if ! fm_compose up --detach --wait --wait-timeout "${UP_WAIT_TIMEOUT:-3600}" --r
   die "не все сервисы прошли healthcheck. Журнал сервиса:
   sudo docker compose -f $FM_COMPOSE_FILE logs --tail 100 <сервис>
 Подсказки по типичным проблемам: $FM_DEPLOY_DIR/README.md (раздел «Если что-то не работает»)."
+fi
+if [[ $HN_MODE == nginx ]]; then
+  step "HTTPS через nginx сервера"
+  hn_after_up "${HOSTS[@]}"
 fi
 fm_compose ps
 print_summary

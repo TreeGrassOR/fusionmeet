@@ -334,7 +334,7 @@ check_gpu_in_docker() {
 # port_check PORT PROTO: prints who listens on the port (if anyone) and records
 # a problem unless it is this very stack (fusionmeet-* containers).
 port_check() {
-  local port=$1 proto=$2 flags names procs proc name others=() ours=false
+  local port=$1 proto=$2 flags names procs proc name others=() ours=false behind_nginx=false
   [[ $proto == tcp ]] && flags=-Hltnp || flags=-Hlunp
 
   names=$(docker ps --filter "publish=$port/$proto" --format '{{.Names}}' 2>/dev/null || true)
@@ -354,6 +354,15 @@ port_check() {
           others+=("процесс $proc")
         fi
         ;;
+      nginx)
+        # PROXY_MODE=auto/nginx: up.sh puts FusionMeet behind the host nginx
+        if [[ $port == 80 || $port == 443 ]] && [[ $proto == tcp ]] &&
+          [[ $(env_get "$FM_ENV_FILE" PROXY_MODE) != caddy ]]; then
+          behind_nginx=true
+        else
+          others+=("процесс $proc")
+        fi
+        ;;
       *) others+=("процесс $proc") ;;
     esac
   done
@@ -361,6 +370,9 @@ port_check() {
   if ((${#others[@]} > 0)); then
     fail "$port/$proto занят: ${others[*]}"
     PROBLEMS+=("порт $port/$proto занят (${others[*]})")
+  elif $behind_nginx; then
+    ok "$port/$proto занят nginx сервера: FusionMeet встанет за него (up.sh добавит в nginx"
+    note "только meet./id./livekit.<BASE_DOMAIN>, остальные сайты не меняются; PROXY_MODE в .env)"
   elif $ours; then
     ok "$port/$proto занят самим FusionMeet (повторный запуск)"
   else
@@ -382,6 +394,13 @@ check_ports() {
   port_check 7881 tcp
   port_check 7882 udp
   port_check "$redis_port" tcp
+  # Caddy's 127.0.0.1 ports when FusionMeet sits behind the host nginx
+  local caddy_port key
+  for key in CADDY_LOCAL_HTTP_PORT CADDY_LOCAL_HTTPS_PORT; do
+    caddy_port=$(env_get "$FM_ENV_FILE" "$key")
+    [[ -n $caddy_port ]] || caddy_port=$(env_get "$FM_ENV_EXAMPLE" "$key")
+    [[ -z $caddy_port ]] || port_check "$caddy_port" tcp
+  done
   note "80/tcp, 443/tcp, 443/udp, 7881/tcp, 7882/udp должны быть проброшены на роутере на этот сервер;"
   note "7880/tcp (API LiveKit) и $redis_port/tcp (Redis, только 127.0.0.1) пробрасывать не нужно."
 }
@@ -440,30 +459,40 @@ show_vram() {
     note "контейнер ${FM_PROJECT}-asr уже работает: занятая им память входит в «занято»."
   fi
 
-  local missing
-  missing=$(awk -v f="$free_mib" -v n="$need" 'BEGIN { m = n - f / 1024; if (m > 0) printf "%.1f", m }')
-  if [[ -z $missing ]]; then
-    ok "для asr нужно ASR_MAX_VRAM_GB=$need ГБ: хватает"
+  # asr measures the free memory after creating its CUDA context (~0.5 GB) and
+  # uses min(ASR_MAX_VRAM_GB, free) as its budget: large_ctc if it fits, ctc otherwise.
+  local large small budget
+  large=$(env_get "$FM_ENV_FILE" ASR_MODEL_VRAM_GB)
+  [[ -n $large ]] || large=$(env_get "$FM_ENV_EXAMPLE" ASR_MODEL_VRAM_GB)
+  large=${large:-3.0}
+  small=$(env_get "$FM_ENV_FILE" ASR_FALLBACK_VRAM_GB)
+  [[ -n $small ]] || small=$(env_get "$FM_ENV_EXAMPLE" ASR_FALLBACK_VRAM_GB)
+  small=${small:-1.5}
+  budget=$(awk -v f="$free_mib" -v n="$need" 'BEGIN { b = f / 1024 - 0.5; if (b > n) b = n; printf "%.1f", b }')
+  if awk -v b="$budget" -v l="$large" 'BEGIN { exit !(b >= l) }'; then
+    ok "asr получит около $budget ГБ (ASR_MAX_VRAM_GB=$need, свободно минус ~0.5 ГБ на CUDA): хватает на large_ctc (~$large ГБ)"
     return
   fi
-  warn "для asr нужно ASR_MAX_VRAM_GB=$need ГБ, свободно $(awk -v f="$free_mib" 'BEGIN{printf "%.1f", f/1024}') ГБ: не хватает $missing ГБ"
-  local util_info util who new_util
+  if awk -v b="$budget" -v s="$small" 'BEGIN { exit !(b >= s) }'; then
+    warn "asr получит около $budget ГБ: на large_ctc (~$large ГБ) не хватает, asr сам загрузит ctc (~$small ГБ)"
+    note "Распознавание будет работать, но с чуть большим числом ошибок. Для large_ctc"
+    note "освободите ещё $(awk -v b="$budget" -v l="$large" 'BEGIN{printf "%.1f", l - b}') ГБ видеопамяти (другие процессы на GPU, см. список выше)."
+    return
+  fi
+  local missing
+  missing=$(awk -v b="$budget" -v s="$small" 'BEGIN{printf "%.1f", s - b}')
+  warn "asr получит около $budget ГБ: не хватает даже на ctc (~$small ГБ), asr не запустится"
+  local util_info util who
   util_info=$(vllm_utilization)
-  note "Что можно сделать:"
+  note "Освободите на GPU ещё $missing ГБ:"
   if [[ -n $util_info ]]; then
     util=${util_info%% *}
     who=${util_info#* }
-    new_util=$(awk -v u="$util" -v m="$missing" -v t="$total_mib" \
-      'BEGIN { v = u - m * 1024 / t; v = int(v * 100) / 100; printf "%.2f", v }')
-    note "- уменьшить --gpu-memory-utilization у vLLM ($who): сейчас $util,"
-    note "  нужно не больше $new_util (каждые 0.01 = $(awk -v t="$total_mib" 'BEGIN{printf "%.2f", t/1024/100}') ГБ);"
-  else
-    note "- уменьшить --gpu-memory-utilization у vLLM: каждые 0.01 освобождают"
-    note "  $(awk -v t="$total_mib" 'BEGIN{printf "%.2f", t/1024/100}') ГБ этой GPU;"
+    note "- уменьшить --gpu-memory-utilization у vLLM ($who, сейчас $util):"
+    note "  каждые 0.01 = $(awk -v t="$total_mib" 'BEGIN{printf "%.2f", t/1024/100}') ГБ;"
   fi
-  note "- или уменьшить ASR_MAX_VRAM_GB в $FM_ENV_FILE: large_ctc нужно около 3 ГБ,"
-  note "  запасной модели ctc около 1,5 ГБ (asr выберет её сам, если памяти меньше)."
-  note "install.sh сам vLLM не меняет."
+  note "- или остановить/уменьшить другие процессы на GPU из списка выше."
+  note "install.sh сам ничего на GPU не меняет."
   TODO+=("освободить $missing ГБ видеопамяти для asr (см. раздел 6 выше)")
 }
 
