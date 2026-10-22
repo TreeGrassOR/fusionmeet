@@ -11,7 +11,11 @@ const tagClass = css({
   paddingY: '0.0625rem',
   borderRadius: 'full',
   backgroundColor: 'surface.hover',
-  color: 'fg.muted',
+  // fg.muted is below 4.5:1 on surface.hover in the dark theme
+  color: {
+    base: 'fg.muted',
+    _dark: 'color-mix(in srgb, {colors.fg} 30%, {colors.fg.muted})',
+  },
   fontSize: '0.75rem',
   fontWeight: 500,
 })

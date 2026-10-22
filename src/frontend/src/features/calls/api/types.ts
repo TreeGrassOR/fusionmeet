@@ -33,6 +33,8 @@ export type CallApi = {
   // the first participants only, `participants_count` counts all of them
   participants: CallParticipantApi[]
   participants_count: number
+  // the user is one of the participants, listed or not
+  participated: boolean
   last_message: CallLastMessageApi | null
   messages_count: number
   unread_count: number
@@ -79,6 +81,9 @@ export type CallDetailApi = Omit<CallApi, 'participants'> & {
  */
 export type CallMessageApi = {
   id: string
+  // the same for the messages of one sender in the call (two senders may
+  // share a name)
+  sender_key: string
   sender_name: string
   sender_is_me: boolean
   text: string

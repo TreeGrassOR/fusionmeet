@@ -1,10 +1,18 @@
-const isSameDay = (a: Date, b: Date) =>
+export const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate()
 
 const dayBefore = (date: Date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1)
+
+/**
+ * Milliseconds from `date` to the next local midnight (daylight saving time
+ * included), when the labels below change.
+ */
+export const msUntilNextDay = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime() -
+  date.getTime()
 
 /**
  * Time label of a call in the list, in local time: the time today

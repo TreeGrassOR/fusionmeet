@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Form as RACForm,
@@ -35,6 +35,7 @@ import {
 } from '../utils/calendar'
 import { formatDuration } from '../utils/dates'
 import { downloadTextFile } from '../utils/download'
+import { formatTimeZone, isStartInPast } from '../utils/schedule'
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || 'Fusion Meet'
 
@@ -91,14 +92,27 @@ const ScheduleForm = ({
   const [duration, setDuration] = useState(DEFAULT_DURATION_MINUTES)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [isInPast, setIsInPast] = useState(false)
+  // set at once: a double click or Enter pressed twice submits twice before
+  // `isSubmitting` is rendered, and would create two rooms
+  const isSubmittingRef = useRef(false)
 
   const defaultTitle = t('defaultTitle', { appTitle: APP_TITLE })
+  // the inputs are in the browser's time zone, say which one
+  const timeZone = formatTimeZone(parseLocal(date, time) ?? initialStart)
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isSubmittingRef.current) return
     const start = parseLocal(date, time)
     if (!start) return
+    if (isStartInPast(start)) {
+      setIsInPast(true)
+      return
+    }
+    isSubmittingRef.current = true
     setIsSubmitting(true)
+    setIsInPast(false)
     setHasError(false)
     let room: ApiRoom
     try {
@@ -106,6 +120,7 @@ const ScheduleForm = ({
     } catch {
       setHasError(true)
       setIsSubmitting(false)
+      isSubmittingRef.current = false
       return
     }
     const callTitle = title.trim() || defaultTitle
@@ -130,6 +145,12 @@ const ScheduleForm = ({
     })
   }
 
+  const onDateOrTimeChange =
+    (update: (value: string) => void) => (value: string) => {
+      update(value)
+      setIsInPast(false)
+    }
+
   return (
     <RACForm onSubmit={onSubmit}>
       <TextField
@@ -150,13 +171,34 @@ const ScheduleForm = ({
           marginBottom: '1rem',
         })}
       >
-        <TextField value={date} onChange={setDate} isRequired>
+        <TextField
+          value={date}
+          onChange={onDateOrTimeChange(setDate)}
+          isRequired
+          isInvalid={isInPast}
+        >
           <Label className={labelClass}>{t('date')}</Label>
-          <Input type="date" className={inputClass} />
+          <Input
+            type="date"
+            min={toDateInput(new Date())}
+            aria-describedby={isInPast ? 'schedule-past-error' : undefined}
+            className={inputClass}
+          />
         </TextField>
-        <TextField value={time} onChange={setTime} isRequired>
-          <Label className={labelClass}>{t('time')}</Label>
-          <Input type="time" className={inputClass} />
+        <TextField
+          value={time}
+          onChange={onDateOrTimeChange(setTime)}
+          isRequired
+          isInvalid={isInPast}
+        >
+          <Label className={labelClass}>
+            {t('timeWithZone', { zone: timeZone })}
+          </Label>
+          <Input
+            type="time"
+            aria-describedby={isInPast ? 'schedule-past-error' : undefined}
+            className={inputClass}
+          />
         </TextField>
       </div>
       <Field
@@ -170,6 +212,16 @@ const ScheduleForm = ({
         }))}
         wrapperProps={{ className: css({ marginBottom: '1.5rem' }) }}
       />
+      {isInPast && (
+        <Text
+          id="schedule-past-error"
+          variant="warning"
+          role="alert"
+          className={css({ marginBottom: '1rem' })}
+        >
+          {t('pastError')}
+        </Text>
+      )}
       {hasError && (
         <Text
           variant="warning"
@@ -180,7 +232,12 @@ const ScheduleForm = ({
         </Text>
       )}
       <div className={css({ display: 'flex', gap: '0.75rem' })}>
-        <Button type="submit" variant="primary" loading={isSubmitting}>
+        <Button
+          type="submit"
+          variant="primary"
+          loading={isSubmitting}
+          isPending={isSubmitting}
+        >
           {t('submit')}
         </Button>
         <Button variant="secondary" onPress={() => closeDialog?.()}>
@@ -209,12 +266,16 @@ const ScheduledCallView = ({ call }: { call: ScheduledCall }) => {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
+      ...(event.start.getFullYear() !== new Date().getFullYear() && {
+        year: 'numeric',
+      }),
     }).format(event.start)
     const hours = new Intl.DateTimeFormat(locale, { timeStyle: 'short' })
     return t('when', {
       day,
       start: hours.format(event.start),
       end: hours.format(event.end),
+      zone: formatTimeZone(event.start),
     })
   }, [event, i18n.language, t])
 

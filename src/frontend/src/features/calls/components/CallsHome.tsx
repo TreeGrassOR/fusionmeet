@@ -1,5 +1,6 @@
 import { css } from '@/styled-system/css'
 import { Screen } from '@/layout/Screen'
+import { useIsWide } from '../hooks/useIsWide'
 import { CallDetail } from './CallDetail'
 import { CallListPanel } from './CallListPanel'
 import { HomeActions } from './HomeActions'
@@ -8,10 +9,12 @@ import { NavRail } from './NavRail'
 /**
  * Home of a logged-in user, like Yandex Telemost: the navigation, the calls
  * and, on the right, what can be started or the selected call. On a narrow
- * screen the list and the call are shown one at a time.
+ * screen the list and the call are shown one at a time. It stays mounted
+ * from the home to a call and back (one route, see routes.ts).
  */
 export const CallsHome = ({ callId }: { callId?: string }) => {
   const isCallSelected = !!callId
+  const isWide = useIsWide()
   return (
     <Screen header={false} footer={false}>
       <div
@@ -38,7 +41,7 @@ export const CallsHome = ({ callId }: { callId?: string }) => {
             md: { display: 'flex' },
           })}
         >
-          <NavRail />
+          <NavRail isWide={isWide} />
         </div>
         <div
           className={css({
@@ -49,7 +52,11 @@ export const CallsHome = ({ callId }: { callId?: string }) => {
             md: { display: 'flex' },
           })}
         >
-          <CallListPanel selectedCallId={callId} />
+          <CallListPanel
+            selectedCallId={callId}
+            isHidden={isCallSelected && !isWide}
+            isWide={isWide}
+          />
         </div>
         <div
           className={css({
@@ -62,7 +69,7 @@ export const CallsHome = ({ callId }: { callId?: string }) => {
           })}
         >
           {callId ? (
-            <CallDetail key={callId} callId={callId} />
+            <CallDetail key={callId} callId={callId} isListHidden={!isWide} />
           ) : (
             <HomeActions />
           )}

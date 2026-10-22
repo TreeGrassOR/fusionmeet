@@ -25,8 +25,9 @@ import { avatarColor } from '../utils/colors'
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || 'Fusion Meet'
 
-// keep in sync with the md breakpoint of panda.config.ts
-const WIDE_QUERY = '(min-width: 48em)'
+// phones narrower than this (360 px and less) get the mark without the name
+// in the top bar, which would push the account button off the screen
+const NARROW_QUERY = '(max-width: 23.99em)'
 
 const railItem = css({
   display: 'flex',
@@ -141,10 +142,10 @@ const SettingsRailButton = () => {
  * The navigation of the call history: a column of icons on the left of wide
  * screens, a bar on top of narrow ones.
  */
-export const NavRail = () => {
+export const NavRail = ({ isWide }: { isWide: boolean }) => {
   const { t } = useTranslation('calls', { keyPrefix: 'rail' })
   const hasRecordings = useMyRecordingsMenuItems().length > 0
-  const isWide = useMediaQuery(WIDE_QUERY)
+  const isNarrow = useMediaQuery(NARROW_QUERY)
 
   return (
     <nav
@@ -177,20 +178,25 @@ export const NavRail = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          // a long application name gives way to the buttons
+          flexShrink: 1,
+          minWidth: 0,
+          overflow: 'hidden',
           borderRadius: '12px',
           padding: '0.375rem',
           _hover: { backgroundColor: 'surface.hover' },
-          md: { marginBottom: '0.5rem' },
+          md: { flexShrink: 0, marginBottom: '0.5rem' },
         })}
       >
         <BrandLogo
-          compact={isWide}
+          compact={isWide || isNarrow}
           className={css({ fontSize: { base: '1.125rem', md: '1.25rem' } })}
         />
       </Link>
       <ul
         className={css({
           display: 'flex',
+          flexShrink: 0,
           gap: '0.25rem',
           marginLeft: 'auto',
           md: { flexDirection: 'column', marginLeft: 0, gap: '0.375rem' },
@@ -213,6 +219,7 @@ export const NavRail = () => {
       <div
         className={css({
           display: 'flex',
+          flexShrink: 0,
           alignItems: 'center',
           gap: '0.25rem',
           md: { flexDirection: 'column', marginTop: 'auto', gap: '0.5rem' },

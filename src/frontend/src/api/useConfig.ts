@@ -58,6 +58,8 @@ export interface ApiConfig {
   }
   calls?: {
     enabled: boolean
+    // room owners and administrators see the calls of their rooms
+    visible_to_room_admins?: boolean
   }
   diagnostics: {
     connection_test_enabled?: boolean

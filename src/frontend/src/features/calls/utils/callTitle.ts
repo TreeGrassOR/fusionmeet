@@ -13,7 +13,8 @@ export type CallTitleParts =
 type TitledCall = Pick<
   CallApi,
   'title' | 'participants' | 'participants_count' | 'started_at'
->
+> &
+  Partial<Pick<CallApi, 'participated'>>
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? ''
 
@@ -32,11 +33,13 @@ export const getCallTitleParts = (call: TitledCall): CallTitleParts => {
     .filter(Boolean)
     .slice(0, TITLE_NAMES)
   if (names.length) {
-    // the list holds the first participants only, the count all of them
-    const isMeListed = call.participants.some((p) => p.is_me)
+    // the list holds the first participants only, the count all of them,
+    // the user too when they took part (listed or not)
+    const isMeCounted =
+      call.participated ?? call.participants.some((p) => p.is_me)
     const othersCount = Math.max(
       others.length,
-      call.participants_count - (isMeListed ? 1 : 0)
+      call.participants_count - (isMeCounted ? 1 : 0)
     )
     return { kind: 'names', names, more: othersCount - names.length }
   }

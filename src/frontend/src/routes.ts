@@ -1,7 +1,8 @@
 import { flexibleRoomIdPattern } from '@/features/rooms'
 import { ComponentType, lazy, LazyExoticComponent } from 'react'
 
-const HomeRoute = lazy(() => import('@/features/home/routes/Home'))
+// The home of upstream, or the call history of a logged-in user (see below)
+const HomeRoute = lazy(() => import('@/features/calls/routes/HomeRoute'))
 const RecordingDownloadRoute = lazy(
   () => import('@/features/recording/routes/RecordingDownload')
 )
@@ -18,11 +19,11 @@ const ConnectionTestRoute = lazy(
 const MyRecordingsRoute = lazy(
   () => import('@/features/transcription/routes/MyRecordings')
 )
-const CallDetailRoute = lazy(
-  () => import('@/features/calls/routes/CallDetailRoute')
-)
 
 const roomIdRegex = new RegExp(`^[/](?<roomId>${flexibleRoomIdPattern})$`)
+
+const callIdPattern =
+  '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
 export const routes: Record<
   | 'home'
@@ -43,9 +44,12 @@ export const routes: Record<
     to?: (...args: any[]) => string | URL
   }
 > = {
+  // "/" and a call of the history ("/calls/<id>") are one route, so that the
+  // logged-in home (the list of calls) stays mounted when a call is opened
   home: {
     name: 'home',
-    path: '/',
+    path: new RegExp(`^/(?:calls/(?<callId>${callIdPattern}))?$`),
+    to: () => '/',
     Component: HomeRoute,
   },
   room: {
@@ -91,12 +95,13 @@ export const routes: Record<
     path: '/my-recordings',
     Component: MyRecordingsRoute,
   },
-  // A call of the history, shown in the logged-in home
+  // A call of the history, shown in the logged-in home: matched by the
+  // home route above, kept to build its links
   call: {
     name: 'call',
-    path: /^\/calls\/(?<callId>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
+    path: new RegExp(`^/calls/(?<callId>${callIdPattern})$`),
     to: (callId: string) => `/calls/${callId.trim()}`,
-    Component: CallDetailRoute,
+    Component: HomeRoute,
   },
 }
 

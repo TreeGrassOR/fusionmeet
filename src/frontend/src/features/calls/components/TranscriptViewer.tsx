@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button as RACButton, Input, SearchField } from 'react-aria-components'
 import { RiCloseLine, RiDownloadLine, RiSearchLine } from '@remixicon/react'
@@ -17,6 +17,7 @@ import {
   splitOnMatches,
   transcriptFileName,
   transcriptToText,
+  type TranscriptLine,
 } from '../utils/transcript'
 import { PanelState } from './PanelState'
 
@@ -61,6 +62,94 @@ const Highlighted = ({ text, query }: { text: string; query: string }) => (
   </>
 )
 
+/**
+ * The lines of a transcript. Memoized: while the search is typed, only the
+ * field renders at once, the lines follow when React has the time (a long
+ * meeting has thousands of them).
+ */
+const TranscriptLines = memo(function TranscriptLines({
+  lines,
+  query,
+  speakerColors,
+  label,
+}: {
+  lines: readonly TranscriptLine[]
+  query: string
+  speakerColors: Map<string, number>
+  label: string
+}) {
+  return (
+    <ol
+      aria-label={label}
+      className={css({
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.625rem',
+        maxWidth: '52rem',
+        paddingX: { base: '1rem', md: '2rem' },
+        paddingTop: '0.5rem',
+        paddingBottom: '1.5rem',
+      })}
+    >
+      {lines.map((line) => (
+        <li
+          key={line.key}
+          className={css({
+            display: 'grid',
+            gridTemplateColumns: '5rem minmax(0, 1fr)',
+            columnGap: '0.75rem',
+            fontSize: '0.9375rem',
+            lineHeight: 1.5,
+          })}
+        >
+          <span
+            className={css({
+              color: 'fg.muted',
+              fontVariantNumeric: 'tabular-nums',
+              fontSize: '0.8125rem',
+              paddingTop: '0.125rem',
+            })}
+          >
+            [{formatOffset(line.offsetMs)}]
+          </span>
+          <p className={css({ minWidth: 0, overflowWrap: 'anywhere' })}>
+            <span
+              className={cx(
+                css({ fontWeight: 600 }),
+                SPEAKER_COLORS[
+                  speakerColors.get(line.identity || line.name) ?? 0
+                ]
+              )}
+            >
+              <Highlighted text={line.name} query={query} />:
+            </span>{' '}
+            <Highlighted text={line.text} query={query} />
+          </p>
+        </li>
+      ))}
+    </ol>
+  )
+})
+
+/**
+ * How many lines match the search. Always rendered, empty without a search:
+ * screen readers only announce the changes of a live region already there.
+ */
+export const MatchCount = ({
+  query,
+  count,
+}: {
+  query: string
+  count: number
+}) => {
+  const { t } = useTranslation('calls', { keyPrefix: 'transcript' })
+  return (
+    <Text variant="smNote" margin={false} aria-live="polite">
+      {query ? (count ? t('matches', { count }) : t('noMatches')) : ''}
+    </Text>
+  )
+}
+
 const TranscriptDocumentView = ({
   callId,
   transcript,
@@ -75,6 +164,8 @@ const TranscriptDocumentView = ({
   const { t } = useTranslation('calls', { keyPrefix: 'transcript' })
   const documentQuery = useCallTranscript(callId, transcript.id)
   const [search, setSearch] = useState('')
+  // the field follows the keys, the filtering and highlighting may lag
+  const deferredSearch = useDeferredValue(search)
 
   const lines = useMemo(
     () => (documentQuery.data ? getTranscriptLines(documentQuery.data) : []),
@@ -85,10 +176,10 @@ const TranscriptDocumentView = ({
     [lines]
   )
   const visibleLines = useMemo(
-    () => filterTranscriptLines(lines, search),
-    [lines, search]
+    () => filterTranscriptLines(lines, deferredSearch),
+    [lines, deferredSearch]
   )
-  const query = search.trim()
+  const query = deferredSearch.trim()
 
   if (documentQuery.isLoading) {
     return (
@@ -195,13 +286,7 @@ const TranscriptDocumentView = ({
             <RiCloseLine size={18} aria-hidden="true" />
           </RACButton>
         </SearchField>
-        {query && (
-          <Text variant="smNote" margin={false} aria-live="polite">
-            {visibleLines.length
-              ? t('matches', { count: visibleLines.length })
-              : t('noMatches')}
-          </Text>
-        )}
+        <MatchCount query={query} count={visibleLines.length} />
         <Button
           variant="secondary"
           size="sm"
@@ -221,55 +306,12 @@ const TranscriptDocumentView = ({
           {t('download')}
         </Button>
       </div>
-      <ol
-        aria-label={t('label')}
-        className={css({
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.625rem',
-          maxWidth: '52rem',
-          paddingX: { base: '1rem', md: '2rem' },
-          paddingTop: '0.5rem',
-          paddingBottom: '1.5rem',
-        })}
-      >
-        {visibleLines.map((line) => (
-          <li
-            key={line.key}
-            className={css({
-              display: 'grid',
-              gridTemplateColumns: '5rem minmax(0, 1fr)',
-              columnGap: '0.75rem',
-              fontSize: '0.9375rem',
-              lineHeight: 1.5,
-            })}
-          >
-            <span
-              className={css({
-                color: 'fg.muted',
-                fontVariantNumeric: 'tabular-nums',
-                fontSize: '0.8125rem',
-                paddingTop: '0.125rem',
-              })}
-            >
-              [{formatOffset(line.offsetMs)}]
-            </span>
-            <p className={css({ minWidth: 0, overflowWrap: 'anywhere' })}>
-              <span
-                className={cx(
-                  css({ fontWeight: 600 }),
-                  SPEAKER_COLORS[
-                    speakerColors.get(line.identity || line.name) ?? 0
-                  ]
-                )}
-              >
-                <Highlighted text={line.name} query={query} />:
-              </span>{' '}
-              <Highlighted text={line.text} query={query} />
-            </p>
-          </li>
-        ))}
-      </ol>
+      <TranscriptLines
+        lines={visibleLines}
+        query={query}
+        speakerColors={speakerColors}
+        label={t('label')}
+      />
     </>
   )
 }

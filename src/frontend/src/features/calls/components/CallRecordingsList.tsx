@@ -5,17 +5,11 @@ import { RiMicLine, RiVideoLine } from '@remixicon/react'
 import { css } from '@/styled-system/css'
 import { Text } from '@/primitives'
 import { buttonRecipe } from '@/primitives/buttonRecipe'
-import { RecordingMode, RecordingStatus } from '@/features/recording/types'
+import { RecordingMode } from '@/features/recording/types'
 import { getRoutePath } from '@/navigation/getRoutePath'
 import type { CallRecordingApi } from '../api/types'
+import { getRecordingState } from '../utils/recordings'
 import { PanelState } from './PanelState'
-
-const READY_STATUSES = [
-  RecordingStatus.Saved,
-  RecordingStatus.NotificationSucceed,
-  RecordingStatus.ExternalProcessSuccessful,
-]
-const RUNNING_STATUSES = [RecordingStatus.Initiated, RecordingStatus.Active]
 
 const rowClass = css({
   display: 'flex',
@@ -62,13 +56,6 @@ export const CallRecordingsList = ({
     )
   }
 
-  const statusLabel = (status: RecordingStatus) => {
-    if (READY_STATUSES.includes(status)) return t('status.ready')
-    if (RUNNING_STATUSES.includes(status)) return t('status.inProgress')
-    if (status === RecordingStatus.Stopped) return t('status.processing')
-    return t('status.failed')
-  }
-
   return (
     <ul
       className={css({
@@ -80,6 +67,7 @@ export const CallRecordingsList = ({
       {recordings.map((recording) => {
         const isVideo = recording.mode === RecordingMode.ScreenRecording
         const Icon = isVideo ? RiVideoLine : RiMicLine
+        const state = getRecordingState(recording.status)
         return (
           <li key={recording.id} className={rowClass}>
             <span className={iconClass} aria-hidden="true">
@@ -94,16 +82,19 @@ export const CallRecordingsList = ({
                   time: timeFormat.format(new Date(recording.created_at)),
                 })}
                 {' · '}
-                {statusLabel(recording.status)}
+                {t(`status.${state}`)}
               </Text>
             </div>
-            <Link
-              href={getRoutePath('recordingDownload', recording.id) as string}
-              className={buttonRecipe({ variant: 'secondary', size: 'sm' })}
-              aria-label={isVideo ? t('openVideo') : t('openAudio')}
-            >
-              {t('open')}
-            </Link>
+            {/* the other recordings have nothing to show yet, or ever */}
+            {state === 'ready' && (
+              <Link
+                href={getRoutePath('recordingDownload', recording.id) as string}
+                className={buttonRecipe({ variant: 'secondary', size: 'sm' })}
+                aria-label={isVideo ? t('openVideo') : t('openAudio')}
+              >
+                {t('open')}
+              </Link>
+            )}
           </li>
         )
       })}

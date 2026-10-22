@@ -3,6 +3,8 @@ import { Text } from '@/primitives'
 import { ChatMessages } from './ChatMessages'
 import { ChatTextArea } from './ChatTextArea'
 import { styled } from '@/styled-system/jsx'
+import { useConfig } from '@/api/useConfig'
+import { chatDisclaimerKey } from '@/features/calls/utils/chatDisclaimer'
 
 const ChatContainer = styled('div', {
   base: {
@@ -35,11 +37,12 @@ const TextContainer = styled('div', {
 
 export const Chat = () => {
   const { t } = useTranslation('rooms', { keyPrefix: 'chat' })
+  const { data } = useConfig()
 
   return (
     <ChatContainer>
       <TextContainer>
-        <Text variant="sm">{t('disclaimer')}</Text>
+        <Text variant="sm">{t(chatDisclaimerKey(data?.calls))}</Text>
       </TextContainer>
       <ChatMessagesContainer>
         <ChatMessages />

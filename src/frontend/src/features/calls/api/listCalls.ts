@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query'
 import { fetchApi } from '@/api/fetchApi'
 import { callsKeys } from './queryKeys'
 import type { CallApi, PaginatedResponse } from './types'
@@ -9,25 +9,41 @@ export const CALLS_PAGE_SIZE = 30
 // (react-query pauses the interval in a hidden tab).
 const LIST_POLLING_INTERVAL_MS = 30_000
 
-export const fetchCallsPage = ({ q, page }: { q: string; page: number }) => {
+// A list mounted again (another search, back from a call on a phone) is
+// not fetched again before this
+export const LIST_STALE_TIME_MS = 20_000
+
+export const fetchCallsPage = ({
+  q,
+  page,
+  signal,
+}: {
+  q: string
+  page: number
+  signal?: AbortSignal
+}) => {
   const params = new URLSearchParams({
     page: String(page),
     page_size: String(CALLS_PAGE_SIZE),
   })
   if (q) params.set('q', q)
-  return fetchApi<PaginatedResponse<CallApi>>(`calls/?${params}`)
+  return fetchApi<PaginatedResponse<CallApi>>(`calls/?${params}`, { signal })
 }
 
 /**
  * The calls of the logged-in user, most recent activity first, page by page.
+ * While another search loads, the previous results stay (`isPlaceholderData`).
  */
 export const useCalls = (q: string) =>
   useInfiniteQuery({
     queryKey: [callsKeys.list, q],
-    queryFn: ({ pageParam }) => fetchCallsPage({ q, page: pageParam }),
+    queryFn: ({ pageParam, signal }) =>
+      fetchCallsPage({ q, page: pageParam, signal }),
     initialPageParam: 1,
     getNextPageParam: (lastPage, _pages, lastPageParam) =>
       lastPage.next ? lastPageParam + 1 : undefined,
+    placeholderData: keepPreviousData,
+    staleTime: LIST_STALE_TIME_MS,
     refetchInterval: LIST_POLLING_INTERVAL_MS,
     retry: false,
   })

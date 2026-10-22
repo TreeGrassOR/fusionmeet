@@ -450,7 +450,9 @@
     "escapeHint": "Escape drücken zum Schließen"
   },
   "chat": {
-    "disclaimer": "Die Nachrichten sind für die Teilnehmenden im Meeting sichtbar. Sie werden im Anrufverlauf gespeichert, den die Teilnehmenden des Anrufs sehen können.",
+    "disclaimer": "Die Nachrichten sind nur für Teilnehmende zum Zeitpunkt des Sendens sichtbar. Alle Nachrichten werden am Ende des Meetings gelöscht.",
+    "disclaimerSaved": "Die Nachrichten sind für die Teilnehmenden im Meeting sichtbar. Sie werden im Anrufverlauf gespeichert, den die Teilnehmenden des Anrufs sehen können.",
+    "disclaimerSavedWithAdmins": "Die Nachrichten sind für die Teilnehmenden im Meeting sichtbar. Sie werden im Anrufverlauf gespeichert, den die Teilnehmenden des Anrufs sowie die Eigentümer und Administratoren des Raums sehen können.",
     "messagesLog": "Chat-Nachrichten"
   },
   "moreTools": {

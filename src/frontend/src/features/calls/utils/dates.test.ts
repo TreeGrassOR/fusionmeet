@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { formatCallDay, formatCallTimeLabel, formatDuration } from './dates'
+import {
+  formatCallDay,
+  formatCallTimeLabel,
+  formatDuration,
+  msUntilNextDay,
+} from './dates'
 
 // Local times, so the labels read the same in any test timezone
 const NOW = new Date(2026, 9, 22, 15, 30)
@@ -63,5 +68,23 @@ describe('formatDuration', () => {
     expect(formatDuration(minutes(60), 'ru')).toBe('1 ч')
     expect(formatDuration(minutes(65), 'ru')).toBe('1 ч 5 мин')
     expect(formatDuration(minutes(125), 'en')).toBe('2 hr 5 min')
+  })
+})
+
+describe('msUntilNextDay', () => {
+  it('counts the time to the next local midnight', () => {
+    expect(msUntilNextDay(new Date(2026, 9, 22, 23, 58))).toBe(2 * 60_000)
+    expect(msUntilNextDay(new Date(2026, 9, 22, 0, 0))).toBe(
+      new Date(2026, 9, 23).getTime() - new Date(2026, 9, 22).getTime()
+    )
+  })
+
+  it('moves the labels to the next day once it is over', () => {
+    const late = new Date(2026, 9, 22, 23, 58)
+    const next = new Date(late.getTime() + msUntilNextDay(late) + 1000)
+    // what was today is now yesterday
+    expect(
+      formatCallTimeLabel(new Date(2026, 9, 22, 20, 0), next, 'ru', 'вчера')
+    ).toBe('вчера')
   })
 })

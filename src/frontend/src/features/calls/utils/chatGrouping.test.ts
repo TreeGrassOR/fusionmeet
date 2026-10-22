@@ -9,9 +9,11 @@ let counter = 0
 const message = (
   sender_name: string,
   sent_at: string,
-  sender_is_me = false
+  sender_is_me = false,
+  sender_key = `${sender_name}-${sender_is_me}`
 ): CallMessageApi => ({
   id: `m${++counter}`,
+  sender_key,
   sender_name,
   sender_is_me,
   text: 'текст',
@@ -47,6 +49,16 @@ describe('groupMessages', () => {
     expect(
       headers([message('Иван', at(10, 0)), message('Иван', at(10, 0, 5), true)])
     ).toEqual([true, true])
+  })
+
+  it('tells apart two senders with the same name', () => {
+    expect(
+      headers([
+        message('Гость', at(10, 0), false, 'guest-a'),
+        message('Гость', at(10, 0, 20), false, 'guest-b'),
+        message('Гость', at(10, 0, 30), false, 'guest-b'),
+      ])
+    ).toEqual([true, true, false])
   })
 
   it('marks a new day', () => {

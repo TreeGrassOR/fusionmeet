@@ -59,20 +59,21 @@
     "name": "Title",
     "defaultTitle": "Call in {{appTitle}}",
     "date": "Date",
-    "time": "Time",
     "duration": "Duration",
     "submit": "Create the call",
     "cancel": "Cancel",
     "error": "Could not create the call. Please try again.",
     "doneHeading": "Call scheduled",
-    "when": "{{day}}, {{start}}–{{end}}",
+    "when": "{{day}}, {{start}}–{{end}} ({{zone}})",
     "description": "Call link: {{url}}",
     "copy": "Copy link",
     "copied": "Copied",
     "titleNotSaved": "The call was created, but its title was not saved in the call history.",
     "ics": "Download .ics",
     "google": "Google Calendar",
-    "done": "Done"
+    "done": "Done",
+    "timeWithZone": "Time ({{zone}})",
+    "pastError": "This time is already over. Check the date and time of the call."
   },
   "detail": {
     "back": "Back to calls",
@@ -90,7 +91,8 @@
     },
     "error": "Could not load the call.",
     "notFound": "This call does not exist or you cannot access it.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "opened": "Call “{{title}}” opened"
   },
   "chat": {
     "label": "Chat messages",
@@ -98,7 +100,8 @@
     "empty": "Nobody wrote in the chat of this call.",
     "emptyActive": "Nobody wrote in the chat yet. New messages will appear here.",
     "error": "Could not load the messages.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "senderAt": "{{name}}, {{time}}"
   },
   "transcript": {
     "none": "This call has no transcript.",

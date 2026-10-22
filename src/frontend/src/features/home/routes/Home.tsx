@@ -10,16 +10,13 @@ import { IntroSlider } from '../components/IntroSlider'
 import { MoreLink } from '../components/MoreLink'
 import { CreateMeetingMenu } from '../components/CreateMeetingMenu'
 import { CreateUnregisteredMeetingButton } from '../components/CreateUnregisteredMeetingButton'
-import { lazy, ReactNode, Suspense, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 
 import { css } from '@/styled-system/css'
 import { useConfig } from '@/api/useConfig'
 import { LoginButton } from '@/components/LoginButton'
 import { LoadingScreen } from '@/components/LoadingScreen'
 import { captureEvent } from '@/features/analytics/telemetry'
-
-// Logged-in home of the call history (Yandex Telemost-like), when enabled
-const CallsHome = lazy(() => import('@/features/calls/routes/CallsHomeRoute'))
 
 const Columns = ({ children }: { children?: ReactNode }) => {
   return (
@@ -181,14 +178,6 @@ const Home = () => {
 
   if (data?.external_home_url && isLoggedIn == false && !redirectFailed) {
     return <LoadingScreen header={false} footer={false} delay={0} />
-  }
-
-  if (isLoggedIn && data?.calls?.enabled) {
-    return (
-      <Suspense fallback={<LoadingScreen header={false} footer={false} />}>
-        <CallsHome />
-      </Suspense>
-    )
   }
 
   return (
