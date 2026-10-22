@@ -43,13 +43,9 @@
       "tooltip": "Diapositiva siguiente"
     },
     "slidePosition": "Diapositiva {{current}} de {{total}}",
-    "beta": {
-      "text": "Probar la beta",
-      "tooltip": "Acceder al formulario"
-    },
     "slide1": {
       "title": "Pásate a la sencillez. ¡Pruébanos ahora mismo!",
-      "body": "Descubre una solución intuitiva y accesible, pensada para el sector público y todos sus colaboradores."
+      "body": "Una solución intuitiva y accesible para reuniones con colegas, socios y clientes."
     },
     "slide2": {
       "title": "Organiza llamadas de grupo sin límite",
@@ -57,7 +53,7 @@
     },
     "slide3": {
       "title": "Transforma tus reuniones con la IA",
-      "body": "Obtén transcripciones precisas y accionables para impulsar tu productividad. Función experimental, ¡pruébala ahora!"
+      "body": "Transcripciones precisas por participante para no perder ningún acuerdo."
     }
   }
 }

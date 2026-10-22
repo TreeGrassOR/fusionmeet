@@ -1,7 +1,7 @@
 {
   "createMeeting": {
     "createButton": "Aanmaken",
-    "joinButton": "Deelnemen met Visio",
+    "joinButton": "Deelnemen aan vergadering",
     "copyLinkTooltip": "Link kopiëren",
     "resetLabel": "Resetten",
     "participantLimit": "Tot 150 deelnemers.",

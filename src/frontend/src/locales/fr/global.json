@@ -15,10 +15,7 @@
   "loading": "Chargement…",
   "loggedInUserTooltip": "Connecté en tant que ",
   "login": {
-    "buttonLabel": "Se connecter",
-    "proconnectButtonLabel": "S'identifier avec ProConnect",
-    "proconnectLinkLabel": "Qu'est-ce que ProConnect ? - nouvelle fenêtre",
-    "proconnectLink": "Qu'est-ce que ProConnect ?"
+    "buttonLabel": "Se connecter"
   },
   "logout": "Se déconnecter",
   "notFound": {
@@ -27,25 +24,6 @@
   },
   "selected": "sélectionné",
   "submit": "OK",
-  "footer": {
-    "links": {
-      "legifrance": "legifrance.gouv.fr",
-      "infogouv": "info.gouv.fr",
-      "servicepublic": "service-public.fr",
-      "datagouv": "data.gouv.fr",
-      "legalsTerms": "Mentions légales",
-      "data": "Données personnelles et cookie",
-      "accessibility": "Accessibilité : non conforme",
-      "connectionTest": "Tester votre configuration",
-      "ariaLabel": "nouvelle fenêtre",
-      "codeAnnotation": "Notre code est ouvert et disponible sur ce",
-      "code": "dépôt de code Open Source",
-      "technicalDetails": "Fiche Technique",
-      "termsOfService": "Conditions d'utilisation"
-    },
-    "mentions": "Sauf mention contraire, les contenus de ce site sont disponibles sous",
-    "license": "licence etalab 2.0"
-  },
   "loginHint": {
     "title": "Connectez-vous avec votre compte",
     "body": "Au lieu de patienter, connectez-vous avec votre compte.",

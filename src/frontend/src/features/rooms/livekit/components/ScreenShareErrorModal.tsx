@@ -48,16 +48,6 @@ export const ScreenShareErrorModal = ({
                   .{' '}
                 </>
               )}
-              {t('helpLinkText')}{' '}
-              <A
-                href="https://lasuite.crisp.help/fr/article/visio-probleme-de-presentation-1xkf799/"
-                aria-label={t('helpLinkLabel') + '-' + t('newTab')}
-                target="_blank"
-                color="primary"
-              >
-                {t('helpLinkLabel')}
-              </A>
-              .
             </P>
             <Button
               onPress={close}

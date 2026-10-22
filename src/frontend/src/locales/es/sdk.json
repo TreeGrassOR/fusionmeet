@@ -1,7 +1,7 @@
 {
   "createMeeting": {
-    "createButton": "Crear un enlace de Visio",
-    "joinButton": "Unirse con Visio",
+    "createButton": "Crear",
+    "joinButton": "Unirse a la reunión",
     "copyLinkTooltip": "Copiar el enlace",
     "resetLabel": "Restablecer",
     "participantLimit": "Hasta 150 participantes.",

@@ -5,6 +5,7 @@ import { TabPanel, type TabPanelProps } from '@/primitives/Tabs'
 import { userPreferencesStore } from '@/stores/userPreferences'
 import { useSnapshot } from 'valtio'
 import { AppearanceFields } from '../AppearanceFields'
+import { JoinMediaDefaultsFields } from '../JoinMediaDefaultsFields'
 
 export type GeneralTabProps = Pick<TabPanelProps, 'id'>
 
@@ -54,6 +55,7 @@ export const GeneralTab = ({ id }: GeneralTabProps) => {
           fullWidth: true,
         }}
       />
+      <JoinMediaDefaultsFields />
     </TabPanel>
   )
 }

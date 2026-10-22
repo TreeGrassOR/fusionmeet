@@ -37,7 +37,7 @@ export const LoginPrompt = ({ heading, body }: LoginPromptProps) => {
           marginTop: '1rem',
         })}
       >
-        <LoginButton proConnectHint={false} />
+        <LoginButton />
       </div>
     </div>
   )

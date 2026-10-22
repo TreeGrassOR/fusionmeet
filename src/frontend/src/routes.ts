@@ -10,15 +10,6 @@ const CreateMeetingButton = lazy(
   () => import('@/features/sdk/routes/CreateMeetingButton')
 )
 const SettingsPopup = lazy(() => import('@/features/sdk/routes/SettingsPopup'))
-const LegalTermsRoute = lazy(
-  () => import('@/features/legalsTerms/LegalTermsRoute')
-)
-const TermsOfServiceRoute = lazy(
-  () => import('@/features/legalsTerms/TermsOfService')
-)
-const AccessibilityRoute = lazy(
-  () => import('@/features/legalsTerms/Accessibility')
-)
 const RoomRoute = lazy(() => import('@/features/rooms/routes/Room'))
 const FeedbackRoute = lazy(() => import('@/features/rooms/routes/Feedback'))
 const ConnectionTestRoute = lazy(
@@ -35,9 +26,6 @@ export const routes: Record<
   | 'room'
   | 'feedback'
   | 'connectionTest'
-  | 'legalTerms'
-  | 'accessibility'
-  | 'termsOfService'
   | 'sdkCreatePopup'
   | 'sdkCreateButton'
   | 'sdkSettingsPopup'
@@ -71,21 +59,6 @@ export const routes: Record<
     name: 'connectionTest',
     path: '/test-connection',
     Component: ConnectionTestRoute,
-  },
-  legalTerms: {
-    name: 'legalTerms',
-    path: '/mentions-legales',
-    Component: LegalTermsRoute,
-  },
-  accessibility: {
-    name: 'accessibility',
-    path: '/accessibilite',
-    Component: AccessibilityRoute,
-  },
-  termsOfService: {
-    name: 'termsOfService',
-    path: '/conditions-utilisation',
-    Component: TermsOfServiceRoute,
   },
   sdkCreatePopup: {
     name: 'sdkCreatePopup',

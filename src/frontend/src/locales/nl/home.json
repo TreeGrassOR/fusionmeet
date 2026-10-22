@@ -1,7 +1,7 @@
 {
   "createMeeting": "Maak een vergadering",
   "heading": "Eenvoudige en veilige videoconferenties",
-  "intro": "Communiceer en werk gemakkelijk, zonder uw soevereiniteit in gevaar te brengen",
+  "intro": "Communiceer en werk gemakkelijk en houd de controle over uw gegevens",
   "joinInputError": "Gebruik een vergaderlink of code. Voorbeelden:",
   "joinInputExample": "Een 10-lettercode zoals : abc-defg-hij",
   "joinInputLabel": "Vergadering met link",
@@ -41,13 +41,9 @@
       "labelWithPosition": "Volgende dia ({{current}} van {{total}})",
       "tooltip": "Volgende dia"
     },
-    "beta": {
-      "text": "Word lid van de bèta",
-      "tooltip": "Vul het formulier in"
-    },
     "slide1": {
       "title": "Stap over op eenvoud. Probeer ons nu!",
-      "body": "Ontdek een intuïtieve en toegankelijke oplossing, ontworpen voor alle openbare partijen, hun partners en nog veel meer."
+      "body": "Een intuïtieve en toegankelijke oplossing voor vergaderingen met collega's, partners en klanten."
     },
     "slide2": {
       "title": "Houdt groepsgesprekken zonder limieten",
@@ -55,7 +51,7 @@
     },
     "slide3": {
       "title": "Transformeer uw vergaderingen met AI",
-      "body": "Krijg nauwkeurige en bruikbare transcripties om uw productiviteit te stimuleren. Deze mogelijkheid is in bèta, probeer het nu!"
+      "body": "Nauwkeurige transcripties per spreker helpen je om geen enkele afspraak te missen."
     },
     "carouselLabel": "Introductie-diavoorstelling",
     "slidePosition": "Dia {{current}} van {{total}}"

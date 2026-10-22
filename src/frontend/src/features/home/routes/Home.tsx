@@ -200,21 +200,11 @@ const Home = () => {
                   {data?.allow_unregistered_rooms && (
                     <CreateUnregisteredMeetingButton />
                   )}
-                  <LoginButton proConnectHint={false} />
+                  <LoginButton />
                 </>
               )}
               <DialogTrigger>
-                <Button
-                  variant="secondary"
-                  style={{
-                    height:
-                      !isLoggedIn && data?.use_proconnect_button
-                        ? '56px'
-                        : undefined, // Temporary, Align with ProConnect Button fixed height
-                  }}
-                >
-                  {t('joinMeeting')}
-                </Button>
+                <Button variant="secondary">{t('joinMeeting')}</Button>
                 <JoinMeetingDialog />
               </DialogTrigger>
             </div>

@@ -1,7 +1,7 @@
 {
   "createMeeting": "Create a meeting",
   "heading": "Simple and Secure Video Conferencing",
-  "intro": "Communicate and work with ease, without compromising your sovereignty",
+  "intro": "Communicate and work with ease while keeping control of your data",
   "joinInputError": "Use a meeting link or code. Examples:",
   "joinInputExample": "URL or 10-letter code",
   "joinInputLabel": "Meeting link",
@@ -41,13 +41,9 @@
       "labelWithPosition": "Next slide ({{current}} of {{total}})",
       "tooltip": "Next slide"
     },
-    "beta": {
-      "text": "Join the beta",
-      "tooltip": "Fill out the form"
-    },
     "slide1": {
       "title": "Make the switch to simplicity. Try us now!",
-      "body": "Discover an intuitive and accessible solution, designed for all public agents, their partners, and much more."
+      "body": "An intuitive and accessible service for meetings with colleagues, partners and clients."
     },
     "slide2": {
       "title": "Host group calls without limits",
@@ -55,7 +51,7 @@
     },
     "slide3": {
       "title": "Transform your meetings with AI",
-      "body": "Get accurate and actionable transcripts to boost your productivity. Feature in beta—try it now!"
+      "body": "Accurate per-speaker transcripts help you keep track of every decision."
     },
     "carouselLabel": "Introduction slideshow",
     "slidePosition": "Slide {{current}} of {{total}}"

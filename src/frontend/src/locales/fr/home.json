@@ -1,7 +1,7 @@
 {
   "createMeeting": "Créer une réunion",
   "heading": "Visioconférences simples et sécurisées",
-  "intro": "Communiquez et travaillez en toute simplicité, sans compromis sur votre souveraineté",
+  "intro": "Communiquez et travaillez en toute simplicité, en gardant le contrôle de vos données",
   "joinInputError": "Saisissez un lien ou un code de réunion. Exemples :",
   "joinInputExample": "Un code de réunion ressemble à ceci : abc-defg-hij",
   "joinInputLabel": "Lien complet ou code de la réunion",
@@ -43,13 +43,9 @@
       "tooltip": "Diapositive suivante"
     },
     "slidePosition": "Diapositive {{current}} sur {{total}}",
-    "beta": {
-      "text": "Essayer la beta",
-      "tooltip": "Accéder au formulaire"
-    },
     "slide1": {
       "title": "Passez à la simplicité. Essayez-nous dès maintenant !",
-      "body": "Découvrez une solution intuitive et accessible, conçue pour tous les agents publics et leurs partenaires, et bien plus encore."
+      "body": "Une solution intuitive et accessible pour vos réunions avec collègues, partenaires et clients."
     },
     "slide2": {
       "title": "Organisez des appels de groupe sans limite",
@@ -57,7 +53,7 @@
     },
     "slide3": {
       "title": "Transformez vos réunions avec l'IA",
-      "body": "Obtenez des transcriptions précises et actionnables, pour booster votre productivité. Fonctionnalité en beta, essayez-la maintenant !"
+      "body": "Des transcriptions précises, par intervenant, pour ne manquer aucune décision."
     }
   }
 }

@@ -15,10 +15,7 @@
   "loading": "Laden ...",
   "loggedInUserTooltip": "Ingelogd als ",
   "login": {
-    "buttonLabel": "Log in",
-    "proconnectButtonLabel": "Log in met Proconnect",
-    "proconnectLinkLabel": "Wat is ProConnect?",
-    "proconnectLink": "Wat is ProConnect?"
+    "buttonLabel": "Log in"
   },
   "logout": "Uitloggen",
   "notFound": {
@@ -26,25 +23,6 @@
   },
   "selected": "geselecteerd",
   "submit": "OK",
-  "footer": {
-    "links": {
-      "legifrance": "legifrance.gouv.fr",
-      "infogouv": "info.gouv.fr",
-      "servicepublic": "service-public.fr",
-      "datagouv": "data.gouv.fr",
-      "legalsTerms": "Wettelijke kennisgeving",
-      "data": "Persoonlijke gegevens en cookies",
-      "accessibility": "Toegankelijkheid: audit in uitvoering",
-      "connectionTest": "Test je configuratie",
-      "ariaLabel": "nieuw venster",
-      "codeAnnotation": "Onze code is open en beschikbaar op dit",
-      "code": "Open Source Code Repository",
-      "technicalDetails": "Technische fiche",
-      "termsOfService": "Gebruiksvoorwaarden"
-    },
-    "mentions": "Tenzij anders vermeld, is de inhoud van deze site beschikbaar onder",
-    "license": "etalab 2.0 licentie"
-  },
   "loginHint": {
     "title": "Log in met je account",
     "body": "In plaats van te wachten, log in met je account.",
