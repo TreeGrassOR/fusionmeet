@@ -220,6 +220,107 @@ def test_call_detail_can_rejoin(ended, deleted, expected):
     assert data["can_rejoin"] is expected
 
 
+def test_call_detail_closes_call_over(livekit):
+    """A call whose room_finished was lost is shown ended once LiveKit shows
+    its room is gone (CALLS-4).
+    """
+    user = UserFactory()
+    start = timezone.now().replace(microsecond=0) - timedelta(days=2)
+    session = CallSessionFactory(started_at=start)
+    CallParticipantFactory(
+        session=session, user=user, left_at=start + timedelta(hours=1)
+    )
+    livekit.available = True
+
+    data = logged_in_client(user).get(call_url(session)).json()
+
+    assert data["is_active"] is False
+    assert data["can_rejoin"] is False
+    assert data["ended_at"] == iso(start + timedelta(hours=1))
+
+
+def test_call_detail_live_call_kept_open(livekit):
+    """A call LiveKit shows live stays open."""
+    user = UserFactory()
+    session = CallSessionFactory()
+    CallParticipantFactory(session=session, user=user)
+    livekit.start_room(session.room, sid=session.livekit_sid)
+
+    data = logged_in_client(user).get(call_url(session)).json()
+
+    assert data["is_active"] is True
+    assert data["can_rejoin"] is True
+    assert livekit.requests == [("list_rooms", [str(session.room_id)])]
+
+
+def test_call_detail_consecutive_calls():
+    """A transcript or recording started at the end of a call belongs to that
+    call only, not to the next call of the room (CALLS-6).
+    """
+    user = UserFactory()
+    newcomer = UserFactory()
+    room = RoomFactory()
+    first_start = timezone.now().replace(microsecond=0) - timedelta(hours=2)
+    first = CallSessionFactory(
+        room=room,
+        started_at=first_start,
+        ended_at=first_start + timedelta(minutes=30),
+    )
+    CallParticipantFactory(session=first, user=user)
+    second = CallSessionFactory(
+        room=room, started_at=first.ended_at + timedelta(seconds=20)
+    )
+    CallParticipantFactory(session=second, user=user)
+    CallParticipantFactory(session=second, user=newcomer)
+    near_end = TranscriptFactory(
+        room=room,
+        status=TranscriptStatusChoices.READY,
+        started_at=first.ended_at - timedelta(seconds=5),
+    )
+    at_end = TranscriptFactory(
+        room=room, status=TranscriptStatusChoices.READY, started_at=first.ended_at
+    )
+    between = TranscriptFactory(
+        room=room,
+        status=TranscriptStatusChoices.READY,
+        started_at=first.ended_at + timedelta(seconds=10),
+    )
+    recordings = {}
+    for key, created_at in (
+        ("near_end", first.ended_at - timedelta(seconds=5)),
+        ("at_end", first.ended_at),
+        ("between", first.ended_at + timedelta(seconds=10)),
+    ):
+        recordings[key] = RecordingFactory(
+            room=room, users=[user], status=RecordingStatusChoices.SAVED
+        )
+        type(recordings[key]).objects.filter(pk=recordings[key].pk).update(
+            created_at=created_at
+        )
+    client = logged_in_client(user)
+
+    first_data = client.get(call_url(first)).json()
+    second_data = client.get(call_url(second)).json()
+
+    assert [t["id"] for t in first_data["transcripts"]] == [
+        str(near_end.id),
+        str(at_end.id),
+    ]
+    assert [t["id"] for t in second_data["transcripts"]] == [str(between.id)]
+    assert [r["id"] for r in first_data["recordings"]] == [
+        str(recordings["near_end"].id),
+        str(recordings["at_end"].id),
+    ]
+    assert [r["id"] for r in second_data["recordings"]] == [
+        str(recordings["between"].id)
+    ]
+    # Not readable through the next call by someone who was not in the first
+    response = logged_in_client(newcomer).get(
+        call_url(second, f"transcripts/{near_end.id}/")
+    )
+    assert response.status_code == 404
+
+
 # Messages
 
 

@@ -3,13 +3,18 @@
 LiveKit sends the webhooks of a room in order, on a queue per webhook URL, but
 drops an event that waited more than 30 seconds: any event can be lost. The
 session of a call is therefore created by whichever comes first (its
-`room_started` or `participant_joined` event, or a chat message), and a call
-whose `room_finished` event was lost is closed when the next call of the room
-starts.
+`room_started` or `participant_joined` event, or a chat message posted while
+LiveKit shows the room live), and a call whose `room_finished` event was lost
+is closed when the next call of the room starts, or when LiveKit shows it is
+over (see `reconcile_sessions`).
+
+Clients are not trusted: a chat message is stored only when LiveKit shows its
+sender connected to the call, under the name LiveKit knows.
 """
 
 # pylint: disable=no-member
 
+import hashlib
 import re
 import uuid
 from datetime import datetime, timedelta
@@ -17,6 +22,7 @@ from datetime import timezone as dt_timezone
 from logging import getLogger
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Value
@@ -28,6 +34,7 @@ from livekit import api
 
 from core.models import Room, User
 
+from . import room_service
 from .models import CallParticipant, CallRoomTitle, CallSession, ChatMessage
 
 logger = getLogger(__name__)
@@ -41,6 +48,21 @@ LIVEKIT_ROOM_SID_PATTERN = re.compile(r"RM_[A-Za-z0-9]+")
 # Client clocks drift: a message may be dated a little before its call started
 SENT_AT_TOLERANCE = timedelta(minutes=1)
 
+# A message reaches the backend within seconds (a 5 second wait for the room
+# sid, then retries after 1, 2 and 4 seconds): it is never dated earlier
+SENT_AT_MAX_DELAY = timedelta(minutes=2)
+
+# Messages retried after the end of their call are still accepted for so long
+ENDED_CALL_GRACE = timedelta(minutes=2)
+
+# How long LiveKit's word that a participant is connected to a call is trusted
+PRESENCE_CACHE_SECONDS = 30
+
+# An open call is checked against LiveKit once it is this old, and no more
+# often than every RECONCILE_INTERVAL_SECONDS
+RECONCILE_AFTER = timedelta(minutes=10)
+RECONCILE_INTERVAL_SECONDS = 5 * 60
+
 # Attempts to create a session that concurrent requests may create too
 SESSION_CREATION_ATTEMPTS = 3
 
@@ -53,8 +75,16 @@ class WebhookPayloadError(Exception):
     """The webhook body is not a LiveKit event."""
 
 
-class ChatMessageConflictError(Exception):
-    """A message with the same id was posted by another participant."""
+class NoLiveCallError(Exception):
+    """The message names no call of the room that LiveKit shows live."""
+
+
+class SenderNotConnectedError(Exception):
+    """LiveKit does not show the sender connected to the call."""
+
+
+class CallEndedError(Exception):
+    """The call ended too long ago to accept a message."""
 
 
 def from_milliseconds(value):
@@ -124,18 +154,15 @@ def close_session(session, ended_at):
 
 def _get_or_create_session(room, sid, started_at):
     """Find or create the session of a room instance (see `ensure_session`)."""
-    if sid:
-        session = (
-            CallSession.objects.select_for_update().filter(livekit_sid=sid).first()
-        )
-        if session is not None:
-            if started_at < session.started_at:
-                # Created by a chat message, before the webhooks arrived
-                CallSession.objects.filter(pk=session.pk).update(
-                    started_at=Least(F("started_at"), Value(started_at))
-                )
-                session.refresh_from_db()
-            return session
+    session = CallSession.objects.select_for_update().filter(livekit_sid=sid).first()
+    if session is not None:
+        if started_at < session.started_at:
+            # Opened by an event that did not tell when LiveKit created the room
+            CallSession.objects.filter(pk=session.pk).update(
+                started_at=Least(F("started_at"), Value(started_at))
+            )
+            session.refresh_from_db()
+        return session
 
     open_session = (
         CallSession.objects.select_for_update()
@@ -143,17 +170,6 @@ def _get_or_create_session(room, sid, started_at):
         .first()
     )
     if open_session is not None:
-        if not sid:
-            return open_session
-
-        if open_session.livekit_sid is None:
-            # Created by a chat message posted without the room sid
-            CallSession.objects.filter(pk=open_session.pk).update(
-                livekit_sid=sid, started_at=Least(F("started_at"), Value(started_at))
-            )
-            open_session.refresh_from_db()
-            return open_session
-
         logger.info(
             "Closing call %s of room %s: its room_finished event was lost",
             open_session.pk,
@@ -163,7 +179,7 @@ def _get_or_create_session(room, sid, started_at):
 
     session = CallSession.objects.create(
         room=room,
-        livekit_sid=sid or None,
+        livekit_sid=sid,
         title=get_room_call_title(room),
         started_at=started_at,
         last_activity_at=started_at,
@@ -175,10 +191,9 @@ def _get_or_create_session(room, sid, started_at):
 def ensure_session(room, sid, started_at):
     """Return the session of a LiveKit room instance, created if needed.
 
-    The sid must come from LiveKit. Without a sid, the open session of the room
-    is returned (or a new one, that a later webhook completes with its sid). A
-    room has at most one open session: an open session with another sid is
-    closed, since its `room_finished` event was lost.
+    The sid must come from LiveKit. A room has at most one open session: an
+    open session with another sid is closed, since its `room_finished` event
+    was lost.
     """
     last_error = None
     for _attempt in range(SESSION_CREATION_ATTEMPTS):
@@ -189,6 +204,63 @@ def ensure_session(room, sid, started_at):
             # A concurrent webhook or message created the session first
             last_error = error
     raise last_error
+
+
+def live_room_started_at(live_room):
+    """Time at which LiveKit created a live room instance."""
+    return (
+        from_milliseconds(live_room.creation_time_ms)
+        or from_seconds(live_room.creation_time)
+        or timezone.now()
+    )
+
+
+def reconcile_sessions(sessions):
+    """Close the open calls among some sessions that LiveKit shows are over.
+
+    It catches the calls whose `room_finished` event was lost in a room that
+    is not used again. Only calls open for a while are checked, each at most
+    every few minutes; nothing is done when LiveKit does not answer.
+
+    Returns:
+        The sessions closed.
+    """
+    now = timezone.now()
+    candidates = [
+        session
+        for session in sessions
+        if session.ended_at is None and session.started_at < now - RECONCILE_AFTER
+    ]
+    candidates = [
+        session
+        for session in candidates
+        if cache.add(f"calls:reconcile:{session.pk}", True, RECONCILE_INTERVAL_SECONDS)
+    ]
+    if not candidates:
+        return []
+
+    try:
+        live_rooms = room_service.get_live_rooms(
+            session.room_id for session in candidates
+        )
+    except room_service.LiveKitUnavailableError as error:
+        logger.warning("Could not check the open calls with LiveKit: %s", error)
+        return []
+
+    closed = []
+    for session in candidates:
+        live_room = live_rooms.get(str(session.room_id))
+        if live_room is not None and live_room.sid == session.livekit_sid:
+            continue
+        next_started_at = live_room_started_at(live_room) if live_room else now
+        logger.info(
+            "Closing call %s of room %s: LiveKit shows it is over",
+            session.pk,
+            session.room_id,
+        )
+        close_session(session, estimate_end(session, next_started_at))
+        closed.append(session)
+    return closed
 
 
 def resolve_user(identity, is_authenticated):
@@ -401,121 +473,142 @@ class CallWebhookService:
             left_at=self._event_time(event),
         )
 
-    def _handle_room_finished(self, room, event):
+    def _handle_room_finished(self, room, event):  # pylint: disable=unused-argument
         """Close the call (also in a deleted room)."""
         session = CallSession.objects.filter(livekit_sid=event.room.sid).first()
         if session is None:
-            # Its room_started and participant_joined events were lost: only
-            # chat messages, posted without the sid, opened it
-            session = CallSession.objects.filter(
-                room=room, ended_at__isnull=True, livekit_sid__isnull=True
-            ).first()
-        if session is None:
             return
-
-        if session.livekit_sid is None:
-            CallSession.objects.filter(pk=session.pk).update(livekit_sid=event.room.sid)
         close_session(session, self._event_time(event))
 
 
-def display_name_of(request, name):
-    """Name under which a chat message is stored.
+def _presence_cache_key(session, identity):
+    """Cache key of LiveKit's word that an identity is connected to a call."""
+    digest = hashlib.sha256(identity.encode()).hexdigest()
+    return f"calls:presence:{session.pk}:{digest}"
 
-    The name chosen in the call when the participant can edit it (guests, or
-    everyone with AUTHENTICATED_PARTICIPANTS_CAN_EDIT_DISPLAY_NAME), otherwise
-    the name of their LiveKit token.
+
+def verify_sender(room, session, identity, live_room=None):
+    """Check with LiveKit that a sender is connected to an open call.
+
+    The sender is recorded as a participant of the call from LiveKit's answer,
+    as its `participant_joined` event would, and LiveKit's answer is trusted
+    for PRESENCE_CACHE_SECONDS. `live_room` is the LiveKit room of the call
+    when it was just asked.
+
+    Returns:
+        The name of the sender in the call (renames included).
+
+    Raises:
+        NoLiveCallError: LiveKit does not show the call live.
+        SenderNotConnectedError: LiveKit does not show the sender connected.
+        room_service.LiveKitUnavailableError: LiveKit did not answer.
     """
-    can_edit = (
-        settings.AUTHENTICATED_PARTICIPANTS_CAN_EDIT_DISPLAY_NAME
-        or not request.user.is_authenticated
+    key = _presence_cache_key(session, identity)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached["name"]
+
+    if live_room is None:
+        live_room = room_service.get_live_room(room.id)
+        if live_room is None or live_room.sid != session.livekit_sid:
+            raise NoLiveCallError(session.livekit_sid)
+
+    info = room_service.get_participant(room.id, identity)
+    if (
+        info is None
+        or info.kind not in HUMAN_KINDS
+        or info.state == api.ParticipantInfo.DISCONNECTED
+    ):
+        raise SenderNotConnectedError(identity)
+
+    name = info.name[:255]
+    record_join(
+        session,
+        identity=identity,
+        name=name,
+        user=resolve_user(identity, info.attributes.get("is_authenticated") == "true"),
+        joined_at=from_milliseconds(info.joined_at_ms)
+        or from_seconds(info.joined_at)
+        or timezone.now(),
     )
-    chosen = (name or "").strip() if can_edit else ""
-    return (chosen or request.auth.name or "")[:255]
+    cache.set(key, {"name": name}, PRESENCE_CACHE_SECONDS)
+    return name
 
 
-def sender_user_of(request):
-    """User who posts a chat message with a LiveKit token, None for guests."""
-    attributes = request.auth.attributes or {}
-    if request.user.is_authenticated and attributes.get("is_authenticated") == "true":
-        return request.user
-    return None
+def find_message_session(room, room_sid):
+    """Return the call a chat message belongs to, with its LiveKit room when
+    LiveKit was asked.
 
+    The client sends the sid of the room instance it is connected to. A
+    recorded call of the room with that sid is the one. Otherwise (no sid, or
+    the webhooks of the call did not arrive yet), it is the call LiveKit shows
+    live, recorded here if needed: a client never opens a call that LiveKit
+    does not show, and never files a message into another call.
 
-def record_sender(session, *, identity, user, name, at):
-    """Make sure the sender of a chat message is a participant of its call.
-
-    Without its `participant_joined` event, the participant is recorded as
-    joined when the message was sent. In-call renames have no webhook: the
-    latest name is the one of the latest message.
-    """
-    participant = CallParticipant.objects.filter(
-        session=session, identity=identity
-    ).first()
-    if participant is None:
-        try:
-            with transaction.atomic():
-                CallParticipant.objects.create(
-                    session=session,
-                    identity=identity,
-                    user=user,
-                    name=name,
-                    is_guest=user is None,
-                    joined_at=at,
-                    # Any departure of this connection must be recorded
-                    last_joined_at=min(at, session.started_at),
-                )
-        except (DjangoValidationError, IntegrityError):
-            pass  # Its participant_joined event was processed meanwhile
-        return
-
-    if name and name != participant.name:
-        CallParticipant.objects.filter(pk=participant.pk).update(name=name)
-
-
-def get_message_session(room, room_sid, sent_at):
-    """Return the call a chat message belongs to.
-
-    The room sid sent by the client only selects a recorded call of the room:
-    a client never closes a call or writes a sid, which come from LiveKit
-    webhooks only. Without such a call, the message goes to the open call of
-    the room, or opens one that the webhooks of the call complete.
+    Raises:
+        NoLiveCallError: no call of the room is live, or not the one of the sid.
+        room_service.LiveKitUnavailableError: LiveKit did not answer.
     """
     if room_sid:
         session = CallSession.objects.filter(room=room, livekit_sid=room_sid).first()
         if session is not None:
-            return session
-    return ensure_session(room, None, sent_at)
+            return session, None
+
+    live_room = room_service.get_live_room(room.id)
+    if live_room is None or (room_sid and room_sid != live_room.sid):
+        raise NoLiveCallError(room_sid)
+    session = ensure_session(room, live_room.sid, live_room_started_at(live_room))
+    return session, live_room
 
 
 def store_chat_message(  # noqa: PLR0913  # pylint: disable=too-many-arguments
-    room, *, identity, user, name, client_id, text, sent_at, room_sid
+    room, *, identity, client_id, text, sent_at, room_sid
 ):
     """Store a chat message posted by its sender's client.
 
-    The message id is the LiveKit text stream id: posting it again is a no-op.
+    The message id is the LiveKit text stream id, which every participant
+    receives: it identifies a message of its sender, and posting it again is a
+    no-op. The sender must be connected to the call, or have been a
+    participant of a call that just ended (a message retried after the end).
+    The client's clock is only trusted within a short delay before receipt.
 
     Returns:
         A (message, created) tuple.
 
     Raises:
-        ChatMessageConflictError: another participant posted a message with
-            the same id.
+        CallEndedError: the call ended more than ENDED_CALL_GRACE ago.
+        NoLiveCallError: the message names no live call of the room.
+        SenderNotConnectedError: the sender is not connected to the call.
+        room_service.LiveKitUnavailableError: LiveKit did not answer.
     """
     existing = ChatMessage.objects.filter(
-        session__room=room, client_id=client_id
+        session__room=room, sender_identity=identity, client_id=client_id
     ).first()
     if existing is not None:
-        if existing.sender_identity != identity:
-            raise ChatMessageConflictError(client_id)
         return existing, False
 
-    now = timezone.now()
-    session = get_message_session(
-        room, room_sid, min(max(sent_at, now - SENT_AT_TOLERANCE), now)
-    )
-    sent_at = min(max(sent_at, session.started_at - SENT_AT_TOLERANCE), now)
+    received_at = timezone.now()
+    session, live_room = find_message_session(room, room_sid)
+    if session.ended_at is None:
+        name = verify_sender(room, session, identity, live_room)
+        latest = received_at
+    else:
+        if received_at > session.ended_at + ENDED_CALL_GRACE:
+            raise CallEndedError(session.pk)
+        name = ""
+        latest = min(received_at, session.ended_at)
 
-    record_sender(session, identity=identity, user=user, name=name, at=sent_at)
+    # An ended call gets no new participant: only its participants may post
+    participant = CallParticipant.objects.filter(
+        session=session, identity=identity
+    ).first()
+    if participant is None:
+        raise SenderNotConnectedError(identity)
+
+    earliest = max(
+        session.started_at - SENT_AT_TOLERANCE, received_at - SENT_AT_MAX_DELAY
+    )
+    sent_at = min(max(sent_at, earliest), latest)
 
     try:
         with transaction.atomic():
@@ -523,22 +616,21 @@ def store_chat_message(  # noqa: PLR0913  # pylint: disable=too-many-arguments
                 session=session,
                 client_id=client_id,
                 sender_identity=identity,
-                sender_user=user,
-                sender_name=name,
+                sender_user=participant.user,
+                sender_name=name or participant.name,
                 text=text,
                 sent_at=sent_at,
             )
     except (DjangoValidationError, IntegrityError):
         # Posted twice at the same time
         existing = ChatMessage.objects.filter(
-            session=session, client_id=client_id
+            session=session, sender_identity=identity, client_id=client_id
         ).first()
         if existing is None:
             raise
-        if existing.sender_identity != identity:
-            raise ChatMessageConflictError(client_id) from None
         return existing, False
 
+    # Like sent_at, never past the end of the call
     CallSession.objects.filter(pk=session.pk).update(
         last_activity_at=Greatest(F("last_activity_at"), Value(message.sent_at))
     )

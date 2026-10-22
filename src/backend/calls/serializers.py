@@ -44,6 +44,7 @@ class ChatMessageCreateSerializer(serializers.Serializer):  # pylint: disable=ab
     room_sid = serializers.CharField(
         max_length=64, required=False, allow_null=True, allow_blank=True
     )
+    # Accepted but not used: the name stored is the one LiveKit knows
     name = serializers.CharField(
         max_length=255, required=False, allow_null=True, allow_blank=True
     )

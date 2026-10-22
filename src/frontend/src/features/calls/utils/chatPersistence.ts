@@ -33,13 +33,15 @@ export const toChatMessagePayload = (
 })
 
 /**
- * Network errors, server errors and throttling are worth retrying; other
- * answers (invalid message, no access, conflict) are final.
+ * Network errors (fetch rejects with a TypeError), server errors (among them
+ * 503 when the backend could not ask LiveKit) and throttling are worth
+ * retrying. Any other 4xx (invalid message, sender not connected to the call,
+ * no live call matching the message) and any other error are final.
  */
 export const isRetryableError = (error: unknown) =>
-  !(error instanceof ApiError) ||
-  error.statusCode >= 500 ||
-  error.statusCode === 429
+  error instanceof ApiError
+    ? error.statusCode >= 500 || error.statusCode === 429
+    : error instanceof TypeError
 
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds))

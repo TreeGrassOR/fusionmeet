@@ -13,7 +13,7 @@
 | `asr/` | сервис распознавания речи GigaAM Multilingual (FastAPI, GPU) |
 | `src/agents/gigaam_stt.py`, `transcript_store.py`, `transcription_control.py`, `transcription_reconciler.py`, `transcription_settings.py`, `tests/` | STT-провайдер `gigaam`, хранение расшифровки в S3, управление через метаданные комнаты, повторный запуск агента после падения, модель распознавания комнаты |
 | `src/backend/transcripts/` | Django-приложение: старт и остановка расшифровки, список, скачивание, хук агента |
-| `src/backend/calls/` | Django-приложение «Звонки»: история звонков по вебхукам LiveKit (свой URL `calls/webhooks-livekit/`, второй в `webhook.urls`), сохранение сообщений чата от клиентов, список и карточка звонка, расшифровка звонка для участников, название звонков комнаты |
+| `src/backend/calls/` | Django-приложение «Звонки»: история звонков по вебхукам LiveKit (свой URL `calls/webhooks-livekit/`, второй в `webhook.urls`), сохранение сообщений чата от клиентов, подключённых к звонку (проверка через LiveKit RoomService, `calls/room_service.py`), закрытие звонков, чей `room_finished` потерян, список и карточка звонка, расшифровка звонка для участников, название звонков комнаты |
 | `src/mail/mjml/transcript_ready.mjml` | письмо инициатору о готовой расшифровке |
 | `src/frontend/src/features/transcription/` | кнопки «Расшифровка» и «Запись», индикатор, страница «Мои записи и расшифровки», выбор модели распознавания |
 | `src/frontend/src/primitives/Slider.tsx`, `src/frontend/src/stores/participantAudio.ts`, компоненты громкости в `features/participants`, `features/participantTile`, `features/rooms` | громкость участников и, отдельно, звука их трансляции |

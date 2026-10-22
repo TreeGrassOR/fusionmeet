@@ -15,7 +15,6 @@ from core.factories import RoomFactory, UserFactory
 from calls.factories import (
     CallParticipantFactory,
     CallSessionFactory,
-    ChatMessageFactory,
 )
 from calls.models import CallParticipant, CallRoomTitle, CallSession
 from calls.tests.utils import (
@@ -284,23 +283,10 @@ def test_webhook_participant_joined_before_room_started():
     assert session.participants.get().identity == "guest-1"
 
 
-def test_webhook_adopts_call_opened_by_chat_message():
-    """A call opened by a chat message posted without sid gets its sid."""
-    room = RoomFactory()
-    session = CallSessionFactory(
-        room=room, livekit_sid=None, started_at=CALL_START + timedelta(minutes=1)
-    )
-
-    post_webhook(webhook_event("room_started", room.id))
-
-    session.refresh_from_db()
-    assert CallSession.objects.get() == session
-    assert session.livekit_sid == "RM_first"
-    assert session.started_at == CALL_START
-
-
 def test_webhook_earlier_creation_time_moves_start():
-    """A call opened by a chat message (with sid) starts when LiveKit created it."""
+    """A call opened by an event without the room creation time starts when
+    LiveKit created the room.
+    """
     room = RoomFactory()
     session = CallSessionFactory(
         room=room, livekit_sid="RM_first", started_at=CALL_START + timedelta(minutes=2)
@@ -367,20 +353,6 @@ def test_webhook_room_finished_closes_call():
     assert session.ended_at == end
     assert not session.is_active
     assert present.left_at == end
-
-
-def test_webhook_room_finished_of_call_opened_without_sid():
-    """room_finished closes a call opened by a message posted without sid."""
-    room = RoomFactory()
-    session = CallSessionFactory(room=room, livekit_sid=None)
-    ChatMessageFactory(session=session)
-    end = session.started_at + timedelta(minutes=5)
-
-    post_webhook(webhook_event("room_finished", room.id, at=end))
-
-    session.refresh_from_db()
-    assert session.livekit_sid == "RM_first"
-    assert session.ended_at == end
 
 
 def test_webhook_room_finished_deletes_empty_call():

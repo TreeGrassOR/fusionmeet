@@ -38,7 +38,8 @@ from transcripts.models import Transcript, TranscriptStatusChoices
 from .models import CallParticipant, CallSession, CallUserState, ChatMessage
 
 # Transcripts and recordings belong to the call of their room that was live when
-# they started; the tolerance absorbs a call start known only approximately
+# they started; the tolerance absorbs a call start known only approximately, but
+# never reaches back into the previous call of the room
 LINK_TOLERANCE = timedelta(seconds=30)
 
 # Participants listed with each call of the list (the count gives the others)
@@ -93,6 +94,17 @@ def visible_calls(user):
         Exists(ChatMessage.objects.filter(session=OuterRef("pk")))
     )
 
+    previous_ended_at = (
+        CallSession.objects.filter(
+            room=OuterRef("room_id"), started_at__lt=OuterRef("started_at")
+        )
+        .order_by("-started_at")
+        .values("ended_at")[:1]
+    )
+
+    # Transcripts and recordings of the call: from `link_from` (included) and
+    # after `link_after` (the end of the previous call, excluded) to
+    # `link_until` (included)
     return CallSession.objects.filter(visibility, has_content).annotate(
         participated=Exists(
             CallParticipant.objects.filter(session=OuterRef("pk"), user=user)
@@ -100,6 +112,7 @@ def visible_calls(user):
         link_from=ExpressionWrapper(
             F("started_at") - LINK_TOLERANCE, output_field=DateTimeField()
         ),
+        link_after=Coalesce(Subquery(previous_ended_at), Value(EPOCH)),
         link_until=Coalesce(F("ended_at"), Value(timezone.now())),
     )
 
@@ -132,6 +145,7 @@ def transcripts_of_calls():
     return Transcript.objects.filter(
         room=OuterRef("room_id"),
         started_at__gte=OuterRef("link_from"),
+        started_at__gt=OuterRef("link_after"),
         started_at__lte=OuterRef("link_until"),
     )
 
@@ -142,6 +156,7 @@ def recordings_of_calls(user):
         Q(accesses__user=user) | Q(accesses__team__in=user.get_teams()),
         room=OuterRef("room_id"),
         created_at__gte=OuterRef("link_from"),
+        created_at__gt=OuterRef("link_after"),
         created_at__lte=OuterRef("link_until"),
     )
 
@@ -236,6 +251,7 @@ def call_transcripts(session):
     return Transcript.objects.filter(
         room_id=session.room_id,
         started_at__gte=session.link_from,
+        started_at__gt=session.link_after,
         started_at__lte=session.link_until,
     ).order_by("started_at", "id")
 
@@ -256,6 +272,7 @@ def call_recordings(session, user):
             Q(accesses__user=user) | Q(accesses__team__in=user.get_teams()),
             room_id=session.room_id,
             created_at__gte=session.link_from,
+            created_at__gt=session.link_after,
             created_at__lte=session.link_until,
         )
         .distinct()

@@ -3,8 +3,11 @@
 # pylint: disable=redefined-outer-name
 
 import uuid
+from unittest import mock
 
 import pytest
+
+from calls.tests.utils import FakeLiveKit
 
 
 @pytest.fixture(autouse=True)
@@ -29,3 +32,11 @@ def isolated_cache(settings):
             "KEY_PREFIX": f"test-calls-{uuid.uuid4()}",
         },
     }
+
+
+@pytest.fixture(autouse=True)
+def livekit():
+    """A fake LiveKit server, that does not answer until a room is started."""
+    fake = FakeLiveKit()
+    with mock.patch("core.utils.create_livekit_client", side_effect=fake.client):
+        yield fake

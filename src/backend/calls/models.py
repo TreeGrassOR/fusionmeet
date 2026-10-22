@@ -5,7 +5,7 @@ A call is one instance of a LiveKit room: LiveKit creates the room when the
 first participant joins and closes it shortly after the last one leaves. Each
 instance has its own sid ("RM_..."), so a room hosts a new call every time it
 is used. Calls are fed by LiveKit webhooks (sessions and participants) and by
-the clients, which post the chat messages they send.
+the clients, which post the chat messages they send (checked with LiveKit).
 """
 
 from django.conf import settings
@@ -27,12 +27,8 @@ class CallSession(BaseModel):
     livekit_sid = models.CharField(
         max_length=64,
         unique=True,
-        null=True,
-        blank=True,
         verbose_name=_("LiveKit room sid"),
-        help_text=_(
-            "Set by the LiveKit webhooks, empty while only chat messages are known."
-        ),
+        help_text=_("Sid of the LiveKit room instance, as LiveKit gives it."),
     )
     title = models.CharField(
         max_length=255,
@@ -127,7 +123,11 @@ class CallParticipant(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    """A chat message sent during a call, as posted by its sender's client."""
+    """A chat message sent during a call, as posted by its sender's client.
+
+    The sender is the one LiveKit showed connected to the call, under the name
+    LiveKit knew.
+    """
 
     session = models.ForeignKey(
         CallSession,
@@ -138,7 +138,10 @@ class ChatMessage(BaseModel):
     client_id = models.CharField(
         max_length=64,
         verbose_name=_("Client id"),
-        help_text=_("Id of the LiveKit text stream, the same for every client."),
+        help_text=_(
+            "Id of the LiveKit text stream, the same for every client: unique "
+            "per sender only."
+        ),
     )
     sender_identity = models.CharField(
         max_length=255, verbose_name=_("Sender LiveKit identity")
@@ -169,7 +172,8 @@ class ChatMessage(BaseModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["session", "client_id"], name="unique_chat_message_client_id"
+                fields=["session", "sender_identity", "client_id"],
+                name="unique_chat_message_sender_client_id",
             )
         ]
 
