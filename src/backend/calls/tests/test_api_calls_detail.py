@@ -3,6 +3,7 @@
 # pylint: disable=unused-argument
 
 from datetime import timedelta
+from unittest.mock import ANY
 
 from django.utils import timezone
 
@@ -355,6 +356,7 @@ def test_call_messages():
         "results": [
             {
                 "id": str(first.id),
+                "sender_key": ANY,
                 "sender_name": "Мария",
                 "sender_is_me": False,
                 "text": "Первое",
@@ -362,6 +364,7 @@ def test_call_messages():
             },
             {
                 "id": str(second.id),
+                "sender_key": ANY,
                 "sender_name": "Иван",
                 "sender_is_me": True,
                 "text": "Второе",
@@ -369,6 +372,40 @@ def test_call_messages():
             },
         ],
     }
+
+
+def test_call_messages_sender_key():
+    """Messages are keyed by sender, not by name: two guests named alike get
+    two keys, and a sender's key changes from one call to another.
+    """
+    user = UserFactory()
+    session = CallSessionFactory()
+    CallParticipantFactory(session=session, user=user)
+    start = session.started_at
+    for minute, identity in enumerate(["guest-a", "guest-b", "guest-a"]):
+        ChatMessageFactory(
+            session=session,
+            sender_identity=identity,
+            sender_name="Гость",
+            sent_at=start + timedelta(seconds=10 * minute),
+        )
+    other = CallSessionFactory()
+    CallParticipantFactory(session=other, user=user)
+    ChatMessageFactory(session=other, sender_identity="guest-a")
+
+    client = logged_in_client(user)
+    keys = [
+        message["sender_key"]
+        for message in client.get(call_url(session, "messages/")).json()["results"]
+    ]
+    other_key = client.get(call_url(other, "messages/")).json()["results"][0][
+        "sender_key"
+    ]
+
+    assert keys[0] == keys[2]
+    assert keys[0] != keys[1]
+    assert other_key != keys[0]
+    assert all(len(key) == 16 and "guest" not in key for key in keys)
 
 
 def test_call_messages_pagination():

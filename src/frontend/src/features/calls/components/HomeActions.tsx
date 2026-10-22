@@ -72,8 +72,10 @@ const cardClass = css({
 
 const compactCardClass = css({
   display: 'flex',
-  alignItems: 'center',
-  gap: '0.625rem',
+  // below 360 px the label needs the whole width of the card
+  flexDirection: { base: 'column', xs: 'row' },
+  alignItems: { base: 'flex-start', xs: 'center' },
+  gap: { base: '0.375rem', xs: '0.625rem' },
   minHeight: '3.5rem',
   padding: '0.625rem 0.875rem',
   borderRadius: '14px',
@@ -126,7 +128,11 @@ const ActionCard = forwardRef<HTMLButtonElement, ActionCardProps>(
           fontWeight: 600,
           lineHeight: 1.25,
           maxWidth: '12rem',
+          minWidth: 0,
           textWrap: 'balance',
+          // a long word of a translation rather than past the card
+          overflowWrap: 'break-word',
+          hyphens: 'auto',
         })}
       >
         {label}
@@ -276,6 +282,17 @@ const CompactInviteCard = () => {
         onPress={invite.copyInviteLink}
         isDisabled={invite.isPending}
       />
+      {invite.isError && (
+        // the last card: the message takes the row below the grid
+        <Text
+          variant="warning"
+          role="alert"
+          margin={false}
+          className={css({ gridColumn: '1 / -1' })}
+        >
+          {t('invite.error')}
+        </Text>
+      )}
       <LaterMeetingDialog
         room={invite.fallbackRoom}
         onOpenChange={invite.closeFallback}

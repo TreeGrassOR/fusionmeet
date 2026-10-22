@@ -7,8 +7,8 @@ import type { CallDetailApi } from './types'
 // While the call goes on or a transcript is being written
 const DETAIL_POLLING_INTERVAL_MS = 10_000
 
-export const fetchCall = (callId: string) =>
-  fetchApi<CallDetailApi>(`calls/${callId}/`)
+export const fetchCall = (callId: string, signal?: AbortSignal) =>
+  fetchApi<CallDetailApi>(`calls/${callId}/`, { signal })
 
 export const isCallDetailPending = (call: CallDetailApi | undefined) =>
   !!call &&
@@ -22,7 +22,7 @@ export const isCallDetailPending = (call: CallDetailApi | undefined) =>
 export const useCall = (callId: string) =>
   useQuery({
     queryKey: [callsKeys.detail, callId],
-    queryFn: () => fetchCall(callId),
+    queryFn: ({ signal }) => fetchCall(callId, signal),
     retry: false,
     refetchInterval: (query) =>
       isCallDetailPending(query.state.data)

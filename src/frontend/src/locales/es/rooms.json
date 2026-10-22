@@ -449,7 +449,9 @@
     "closeButton": "Ocultar {{content}}"
   },
   "chat": {
-    "disclaimer": "Los mensajes son visibles para los participantes presentes en la llamada. Se guardan en el historial de la llamada, visible para sus participantes.",
+    "disclaimer": "Los mensajes solo son visibles para los participantes en el momento de\nsu envío. Todos los mensajes se eliminan al final de la llamada.",
+    "disclaimerSaved": "Los mensajes son visibles para los participantes presentes en la llamada. Se guardan en el historial de la llamada, visible para sus participantes.",
+    "disclaimerSavedWithAdmins": "Los mensajes son visibles para los participantes presentes en la llamada. Se guardan en el historial de la llamada, visible para sus participantes y para los propietarios y administradores de la sala.",
     "messagesLog": "Mensajes del chat"
   },
   "moreTools": {

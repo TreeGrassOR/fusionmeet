@@ -450,7 +450,9 @@
     "escapeHint": "Press Escape to close"
   },
   "chat": {
-    "disclaimer": "The messages are visible to the participants in the call. They are saved in the call history, visible to the call participants.",
+    "disclaimer": "The messages are visible to participants only at the time they are sent. All messages are deleted at the end of the call.",
+    "disclaimerSaved": "The messages are visible to the participants in the call. They are saved in the call history, visible to the call participants.",
+    "disclaimerSavedWithAdmins": "The messages are visible to the participants in the call. They are saved in the call history, visible to the call participants and to the room owners and administrators.",
     "messagesLog": "Chat messages"
   },
   "moreTools": {

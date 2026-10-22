@@ -124,6 +124,7 @@ def test_list_calls_item():
                     {"name": "Гость", "is_me": False},
                 ],
                 "participants_count": 3,
+                "participated": True,
                 "last_message": {
                     "sender_name": "Мария",
                     "text": "Ссылка на док",
@@ -222,6 +223,20 @@ def test_list_calls_participants_capped():
         f"Person {index}" for index in range(6)
     ]
     assert item["participants_count"] == 10
+    # the user is not among the ones listed, but did take part
+    assert item["participated"] is True
+
+
+def test_list_calls_participated_room_owner_absent():
+    """A room owner who did not attend is not counted among the participants."""
+    user = UserFactory()
+    room = RoomFactory(users=[(user, RoleChoices.OWNER)])
+    CallParticipantFactory(session__room=room)
+
+    item = list_calls(user).json()["results"][0]
+
+    assert item["participated"] is False
+    assert item["participants_count"] == 1
 
 
 # Visibility

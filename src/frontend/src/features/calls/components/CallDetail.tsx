@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components'
 import { Link } from 'wouter'
@@ -12,6 +12,9 @@ import { navigateTo } from '@/navigation/navigateTo'
 import { useCall } from '../api/fetchCall'
 import { useMarkCallRead } from '../api/markCallRead'
 import type { CallDetailApi } from '../api/types'
+import { useScrollHint } from '../hooks/useScrollHint'
+import { callsUiStore } from '../store'
+import { isOpenedFromList } from '../utils/backToList'
 import { getCallTitle } from '../utils/callTitle'
 import { formatDuration } from '../utils/dates'
 import { CallAvatar } from './CallAvatar'
@@ -31,10 +34,12 @@ const tabClass = css({
   display: 'flex',
   alignItems: 'center',
   gap: '0.375rem',
-  paddingX: { base: '0.625rem', md: '0.875rem' },
+  flexShrink: 0,
+  paddingX: { base: '0.5rem', lg: '0.875rem' },
   paddingY: '0.4375rem',
   borderRadius: 'full',
-  fontSize: '0.875rem',
+  // the four tabs fit a 360 px phone
+  fontSize: { base: '0.8125rem', xs: '0.875rem' },
   fontWeight: 500,
   color: 'fg.muted',
   cursor: 'pointer',
@@ -65,11 +70,22 @@ const panelClass = css({
   },
 })
 
+/**
+ * Back to the list, on narrow screens. A call opened from the list goes back
+ * in the history (the back button of the phone then leaves the page instead
+ * of opening the call again); a link to the call is replaced by the list.
+ */
 const BackLink = () => {
   const { t } = useTranslation('calls', { keyPrefix: 'detail' })
   return (
     <Link
       href="/"
+      replace
+      onClick={(event) => {
+        if (!isOpenedFromList(window.history.state)) return
+        event.preventDefault()
+        window.history.back()
+      }}
       aria-label={t('back')}
       className={css({
         display: 'flex',
@@ -199,12 +215,21 @@ const DetailFrame = ({ children }: { children: ReactNode }) => (
  * A call of the history: what it was, then its chat, transcript,
  * recordings and participants in tabs.
  */
-export const CallDetail = ({ callId }: { callId: string }) => {
+export const CallDetail = ({
+  callId,
+  isListHidden = false,
+}: {
+  callId: string
+  // narrow screens show the call in place of the list
+  isListHidden?: boolean
+}) => {
   const { t } = useTranslation('calls', { keyPrefix: 'detail' })
   const callQuery = useCall(callId)
   const call = callQuery.data
   const { title, when, headerLines } = useCallDescription(call)
   const { mutate: markRead } = useMarkCallRead()
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const tabList = useScrollHint<HTMLDivElement>()
 
   useTitle(title ? `${title} - ${APP_TITLE}` : APP_TITLE)
 
@@ -213,6 +238,23 @@ export const CallDetail = ({ callId }: { callId: string }) => {
   useEffect(() => {
     if (messagesCount !== undefined) markRead(callId)
   }, [callId, messagesCount, markRead])
+
+  // The row that opened the call is hidden with the list on narrow screens:
+  // the focus goes to the call, once it is there
+  const isLoaded = !!call
+  useEffect(() => {
+    if (!isLoaded || callsUiStore.openedCallId !== callId) return
+    callsUiStore.openedCallId = null
+    if (!isListHidden) return
+    const active = document.activeElement
+    const isFocusLost =
+      !active ||
+      active === document.body ||
+      (active instanceof HTMLElement && !active.offsetParent)
+    if (isFocusLost) headingRef.current?.focus()
+    // once per call (the component is keyed by the call)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded])
 
   if (callQuery.isLoading) {
     return (
@@ -276,6 +318,8 @@ export const CallDetail = ({ callId }: { callId: string }) => {
           <BackLink />
           <div className={css({ minWidth: 0 })}>
             <h1
+              ref={headingRef}
+              tabIndex={-1}
               className={css({
                 fontSize: { base: '1.25rem', md: '1.5rem' },
                 fontWeight: 700,
@@ -330,9 +374,12 @@ export const CallDetail = ({ callId }: { callId: string }) => {
         <div
           className={css({
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '1rem',
+            gap: '0.75rem 1rem',
+            minWidth: 0,
+            maxWidth: '100%',
             width: { base: '100%', md: 'auto' },
           })}
         >
@@ -356,6 +403,12 @@ export const CallDetail = ({ callId }: { callId: string }) => {
         </div>
       </header>
       <Tabs
+        onSelectionChange={(key) => {
+          // a tab cut by the edge of a narrow screen comes into view
+          tabList.element
+            ?.querySelector(`[data-key="${CSS.escape(String(key))}"]`)
+            ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        }}
         className={css({
           display: 'flex',
           flexDirection: 'column',
@@ -365,37 +418,57 @@ export const CallDetail = ({ callId }: { callId: string }) => {
           '&[data-focus-visible]': { outline: 'none!' },
         })}
       >
-        <TabList
-          aria-label={t('tabsLabel')}
-          className={css({
-            display: 'flex',
-            gap: '0.25rem',
-            overflowX: 'auto',
-            paddingX: { base: '0.75rem', md: '1.75rem' },
-            paddingBottom: '0.75rem',
-            borderBottom: '1px solid {colors.border.subtle}',
-            '&[data-focus-visible]': { outline: 'none!' },
-          })}
+        <div
+          className={css({ borderBottom: '1px solid {colors.border.subtle}' })}
         >
-          <Tab id="chat" className={tabClass}>
-            <TabLabel label={t('tabs.chat')} count={call.messages_count} />
-          </Tab>
-          <Tab id="transcript" className={tabClass}>
-            <TabLabel label={t('tabs.transcript')} />
-          </Tab>
-          <Tab id="recordings" className={tabClass}>
-            <TabLabel
-              label={t('tabs.recordings')}
-              count={call.recordings.length}
-            />
-          </Tab>
-          <Tab id="participants" className={tabClass}>
-            <TabLabel
-              label={t('tabs.participants')}
-              count={call.participants_count}
-            />
-          </Tab>
-        </TabList>
+          <TabList
+            ref={tabList.ref}
+            aria-label={t('tabsLabel')}
+            {...tabList.hint}
+            className={css({
+              display: 'flex',
+              gap: { base: '0.125rem', lg: '0.25rem' },
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              scrollPaddingX: '2rem',
+              paddingX: { base: '0.5rem', md: '1.25rem', lg: '1.75rem' },
+              paddingBottom: '0.75rem',
+              '&[data-focus-visible]': { outline: 'none!' },
+              // the tabs go on past an edge: fade it
+              '&[data-overflow-end]': {
+                maskImage:
+                  'linear-gradient(to right, black calc(100% - 2.5rem), transparent)',
+              },
+              '&[data-overflow-start]': {
+                maskImage:
+                  'linear-gradient(to left, black calc(100% - 2.5rem), transparent)',
+              },
+              '&[data-overflow-start][data-overflow-end]': {
+                maskImage:
+                  'linear-gradient(to right, transparent, black 2.5rem, black calc(100% - 2.5rem), transparent)',
+              },
+            })}
+          >
+            <Tab id="chat" className={tabClass}>
+              <TabLabel label={t('tabs.chat')} count={call.messages_count} />
+            </Tab>
+            <Tab id="transcript" className={tabClass}>
+              <TabLabel label={t('tabs.transcript')} />
+            </Tab>
+            <Tab id="recordings" className={tabClass}>
+              <TabLabel
+                label={t('tabs.recordings')}
+                count={call.recordings.length}
+              />
+            </Tab>
+            <Tab id="participants" className={tabClass}>
+              <TabLabel
+                label={t('tabs.participants')}
+                count={call.participants_count}
+              />
+            </Tab>
+          </TabList>
+        </div>
         <TabPanel id="chat" className={panelClass}>
           <ChatHistory call={call} />
         </TabPanel>

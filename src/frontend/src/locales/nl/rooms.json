@@ -450,7 +450,9 @@
     "escapeHint": "Druk op Escape om te sluiten"
   },
   "chat": {
-    "disclaimer": "De berichten zijn zichtbaar voor de deelnemers aan het gesprek. Ze worden opgeslagen in de gespreksgeschiedenis, zichtbaar voor de deelnemers van het gesprek.",
+    "disclaimer": "De berichten zijn alleen voor de deelnemers zichtbaar op het moment dat ze worden verzonden. Alle berichten worden verwijderd aan het einde van het gesprek.",
+    "disclaimerSaved": "De berichten zijn zichtbaar voor de deelnemers aan het gesprek. Ze worden opgeslagen in de gespreksgeschiedenis, zichtbaar voor de deelnemers van het gesprek.",
+    "disclaimerSavedWithAdmins": "De berichten zijn zichtbaar voor de deelnemers aan het gesprek. Ze worden opgeslagen in de gespreksgeschiedenis, zichtbaar voor de deelnemers van het gesprek en voor de eigenaren en beheerders van de ruimte.",
     "messagesLog": "Chatberichten"
   },
   "moreTools": {

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { css } from '@/styled-system/css'
 import { Button, Text } from '@/primitives'
 import { Spinner } from '@/primitives/Spinner'
+import { srOnly } from '@/styles/a11y'
 import { ChatMessageBody } from '@/features/chat/components/ChatMessageBody'
 import { useCallMessages } from '../api/listCallMessages'
 import type { CallDetailApi } from '../api/types'
@@ -119,7 +120,12 @@ export const ChatHistory = ({ call }: { call: CallDetailApi }) => {
                   paddingY: '0.125rem',
                   borderRadius: 'full',
                   backgroundColor: 'surface.hover',
-                  color: 'fg.muted',
+                  // fg.muted is below 4.5:1 on surface.hover in the dark theme
+                  color: {
+                    base: 'fg.muted',
+                    _dark:
+                      'color-mix(in srgb, {colors.fg} 30%, {colors.fg.muted})',
+                  },
                   fontSize: '0.75rem',
                 })}
               >
@@ -127,7 +133,6 @@ export const ChatHistory = ({ call }: { call: CallDetailApi }) => {
               </li>
             )}
             <li
-              title={formatters.full.format(row.timestamp)}
               className={css({
                 display: 'flex',
                 gap: '0.75rem',
@@ -147,8 +152,16 @@ export const ChatHistory = ({ call }: { call: CallDetailApi }) => {
                 />
               )}
               <div className={css({ minWidth: 0, flex: 1 })}>
+                {/* every message says who wrote it and when, grouped or not */}
+                <span className={srOnly}>
+                  {t('senderAt', {
+                    name: row.sender_is_me ? t('you') : row.sender_name,
+                    time: formatters.time.format(row.timestamp),
+                  })}
+                </span>
                 {row.showHeader && (
                   <div
+                    aria-hidden="true"
                     className={css({
                       display: 'flex',
                       alignItems: 'baseline',
@@ -164,14 +177,16 @@ export const ChatHistory = ({ call }: { call: CallDetailApi }) => {
                     >
                       {row.sender_is_me ? t('you') : row.sender_name}
                     </span>
-                    <span
+                    <time
+                      dateTime={row.sent_at}
+                      title={formatters.full.format(row.timestamp)}
                       className={css({
                         fontSize: '0.75rem',
                         color: 'fg.muted',
                       })}
                     >
                       {formatters.time.format(row.timestamp)}
-                    </span>
+                    </time>
                   </div>
                 )}
                 <ChatMessageBody message={row.text} />

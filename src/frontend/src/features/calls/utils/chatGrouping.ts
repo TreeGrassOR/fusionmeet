@@ -12,8 +12,11 @@ export type ChatHistoryRow = CallMessageApi & {
   isNewDay: boolean
 }
 
+// by sender, not by name: two guests may both be «Гость»
 const sameSender = (a: CallMessageApi, b: CallMessageApi) =>
-  a.sender_is_me === b.sender_is_me && a.sender_name === b.sender_name
+  a.sender_key && b.sender_key
+    ? a.sender_key === b.sender_key
+    : a.sender_is_me === b.sender_is_me && a.sender_name === b.sender_name
 
 const dayOf = (timestamp: number) => new Date(timestamp).toDateString()
 

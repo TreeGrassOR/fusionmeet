@@ -61,20 +61,21 @@
     "name": "Titre",
     "defaultTitle": "Appel sur {{appTitle}}",
     "date": "Date",
-    "time": "Heure",
     "duration": "Durée",
     "submit": "Créer l'appel",
     "cancel": "Annuler",
     "error": "Impossible de créer l'appel. Veuillez réessayer.",
     "doneHeading": "Appel planifié",
-    "when": "{{day}}, {{start}}–{{end}}",
+    "when": "{{day}}, {{start}}–{{end}} ({{zone}})",
     "description": "Lien de l'appel : {{url}}",
     "copy": "Copier le lien",
     "copied": "Copié",
     "titleNotSaved": "L'appel a été créé, mais son titre n'a pas été enregistré dans l'historique.",
     "ics": "Télécharger le .ics",
     "google": "Google Agenda",
-    "done": "Terminé"
+    "done": "Terminé",
+    "timeWithZone": "Heure ({{zone}})",
+    "pastError": "Cette heure est déjà passée. Vérifiez la date et l'heure de l'appel."
   },
   "detail": {
     "back": "Retour aux appels",
@@ -92,7 +93,8 @@
     },
     "error": "Impossible de charger l'appel.",
     "notFound": "Cet appel n'existe pas ou vous n'y avez pas accès.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "opened": "Appel « {{title}} » ouvert"
   },
   "chat": {
     "label": "Messages du chat",
@@ -100,7 +102,8 @@
     "empty": "Personne n'a écrit dans le chat de cet appel.",
     "emptyActive": "Personne n'a encore écrit dans le chat. Les nouveaux messages apparaîtront ici.",
     "error": "Impossible de charger les messages.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "senderAt": "{{name}}, {{time}}"
   },
   "transcript": {
     "none": "Cet appel n'a pas de transcription.",

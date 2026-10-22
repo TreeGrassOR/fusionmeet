@@ -21,6 +21,10 @@ const itemClass = css({
   '&[data-hovered]': { backgroundColor: 'surface.hover' },
   '&[data-pressed]': { backgroundColor: 'surface.pressed' },
   '&[data-current]': { backgroundColor: 'accent.subtle' },
+  // muted text stays readable (4.5:1) on the tinted rows of the dark theme
+  '&:is([data-current], [data-hovered], [data-pressed]) [data-muted]': {
+    _dark: { color: 'color-mix(in srgb, {colors.fg} 30%, {colors.fg.muted})' },
+  },
   '&[data-focus-visible]': {
     outline: '2px solid {colors.focusRing}',
     outlineOffset: '-2px',
@@ -43,7 +47,7 @@ export const CallListItem = ({
   call: CallApi
   isCurrent: boolean
   now: Date
-  onOpen: (callId: string) => void
+  onOpen: (callId: string, title: string) => void
 }) => {
   const { t, i18n } = useTranslation('calls', { keyPrefix: 'item' })
   const { t: tCalls } = useTranslation('calls')
@@ -95,7 +99,7 @@ export const CallListItem = ({
       textValue={label}
       className={itemClass}
       data-current={isCurrent || undefined}
-      onAction={() => onOpen(call.id)}
+      onAction={() => onOpen(call.id, title)}
     >
       <CallAvatar
         name={avatarName}
@@ -129,6 +133,7 @@ export const CallListItem = ({
             {title}
           </span>
           <span
+            data-muted={!call.is_active || undefined}
             className={css({
               flexShrink: 0,
               fontSize: '0.75rem',
@@ -147,6 +152,7 @@ export const CallListItem = ({
           })}
         >
           <span
+            data-muted
             className={`${ellipsis} ${css({
               flex: 1,
               fontSize: '0.875rem',
@@ -168,6 +174,7 @@ export const CallListItem = ({
             <RiFileTextLine
               size={15}
               aria-hidden="true"
+              data-muted
               className={css({ color: 'fg.muted', flexShrink: 0 })}
             />
           )}
@@ -175,6 +182,7 @@ export const CallListItem = ({
             <RiVideoLine
               size={15}
               aria-hidden="true"
+              data-muted
               className={css({ color: 'fg.muted', flexShrink: 0 })}
             />
           )}

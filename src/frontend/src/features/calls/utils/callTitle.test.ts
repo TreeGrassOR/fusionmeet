@@ -57,14 +57,39 @@ describe('call title', () => {
     const listed = ['Иван', 'Мария', 'Олег', 'Анна', 'Пётр', 'Ольга'].map(
       (name) => person(name)
     )
+    // a room owner who did not attend: all nine are others
     expect(
       getCallTitle(
-        call({ participants: listed, participants_count: 9 }),
+        call({
+          participants: listed,
+          participants_count: 9,
+          participated: false,
+        }),
         t,
         'ru',
         NOW
       )
     ).toBe('Иван, Мария и ещё 7')
+  })
+
+  it('does not count the user among the others when they joined late', () => {
+    // eight participants, the user joined last (not listed): seven others,
+    // as the detail of the call says
+    const listed = ['Иван', 'Мария', 'Олег', 'Анна', 'Пётр', 'Ольга'].map(
+      (name) => person(name)
+    )
+    const listItem = call({
+      participants: listed,
+      participants_count: 8,
+      participated: true,
+    })
+    const detail = call({
+      participants: [...listed, person('Борис'), person('Я', true)],
+      participants_count: 8,
+      participated: true,
+    })
+    expect(getCallTitle(listItem, t, 'ru', NOW)).toBe('Иван, Мария и ещё 5')
+    expect(getCallTitle(detail, t, 'ru', NOW)).toBe('Иван, Мария и ещё 5')
   })
 
   it('reads well with one or two other participants', () => {

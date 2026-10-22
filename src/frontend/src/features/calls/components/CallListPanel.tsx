@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef, type FocusEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Button as RACButton,
@@ -12,20 +12,46 @@ import { RiAddLine, RiCloseLine, RiSearchLine } from '@remixicon/react'
 import { css } from '@/styled-system/css'
 import { Button, Text } from '@/primitives'
 import { Spinner } from '@/primitives/Spinner'
+import { useScreenReaderAnnounce } from '@/hooks/useScreenReaderAnnounce'
 import { navigateTo } from '@/navigation/navigateTo'
 import { useCalls } from '../api/listCalls'
 import { useCreateCall } from '../hooks/useCreateCall'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useToday } from '../hooks/useToday'
 import { callsUiStore } from '../store'
+import { openedFromListState } from '../utils/backToList'
+import { flattenCallPages } from '../utils/callPages'
 import { CallListItem } from './CallListItem'
 import { HomeActions } from './HomeActions'
 
 const SEARCH_DEBOUNCE_MS = 300
 
-// kept across the remounts of the list (the home and a call are two routes)
+// kept when the list is mounted again (after the recordings page) or hidden
+// (a call open on a narrow screen)
 let savedScrollTop = 0
 
-export const CallsSearchField = () => {
+const rowOf = (list: HTMLElement | null, callId: string | undefined) =>
+  callId
+    ? list?.querySelector<HTMLElement>(
+        `[role=row][data-key="${CSS.escape(callId)}"]`
+      )
+    : null
+
+// the focus was on something removed or hidden (the back arrow of a call)
+const isFocusLost = () => {
+  const active = document.activeElement
+  return (
+    !active ||
+    active === document.body ||
+    (active instanceof HTMLElement && !active.offsetParent)
+  )
+}
+
+export const CallsSearchField = ({
+  isSearching = false,
+}: {
+  isSearching?: boolean
+}) => {
   const { t } = useTranslation('calls', { keyPrefix: 'list' })
   const { search } = useSnapshot(callsUiStore)
   return (
@@ -43,16 +69,19 @@ export const CallsSearchField = () => {
         '&[data-empty] button': { display: 'none' },
       })}
     >
-      <RiSearchLine
-        size={18}
+      {/* the previous results stay while the new ones load */}
+      <span
         aria-hidden="true"
         className={css({
           position: 'absolute',
           left: '0.75rem',
+          display: 'flex',
           color: 'fg.muted',
           pointerEvents: 'none',
         })}
-      />
+      >
+        {isSearching ? <Spinner size={18} /> : <RiSearchLine size={18} />}
+      </span>
       <Input
         placeholder={t('search')}
         className={css({
@@ -118,21 +147,32 @@ const CenteredState = ({ children }: { children: React.ReactNode }) => (
  */
 export const CallListPanel = ({
   selectedCallId,
+  isHidden = false,
+  isWide = true,
 }: {
   selectedCallId?: string
+  // a call is open on a narrow screen
+  isHidden?: boolean
+  isWide?: boolean
 }) => {
   const { t } = useTranslation('calls', { keyPrefix: 'list' })
+  const { t: tCalls } = useTranslation('calls')
+  const announce = useScreenReaderAnnounce()
   const { search } = useSnapshot(callsUiStore)
   const query = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS)
   const callsQuery = useCalls(query)
-  const { startCall, isPending: isCreating } = useCreateCall()
+  const {
+    startCall,
+    isPending: isCreating,
+    isError: hasCreateError,
+  } = useCreateCall()
 
   const calls = useMemo(
-    () => callsQuery.data?.pages.flatMap((page) => page.results) ?? [],
+    () => flattenCallPages(callsQuery.data?.pages),
     [callsQuery.data]
   )
-  // labels are relative to today; the list refreshes every 30 s
-  const now = new Date()
+  // labels are relative to today, renewed at midnight
+  const now = useToday()
 
   const listRef = useRef<HTMLDivElement>(null)
   const hasCalls = calls.length > 0
@@ -160,6 +200,43 @@ export const CallListPanel = ({
     savedScrollTop = 0
     if (listRef.current) listRef.current.scrollTop = 0
   }, [query])
+
+  // Back from a call on a narrow screen: the list shows again where it was,
+  // with the focus on the call that was open
+  const lastOpenedId = useRef(selectedCallId)
+  if (selectedCallId) lastOpenedId.current = selectedCallId
+  const wasHidden = useRef(isHidden)
+  useLayoutEffect(() => {
+    const isShownAgain = wasHidden.current && !isHidden
+    wasHidden.current = isHidden
+    const element = listRef.current
+    if (!isShownAgain || !element) return
+    element.scrollTop = savedScrollTop
+    const row = rowOf(element, lastOpenedId.current)
+    if (row && isFocusLost()) row.focus({ preventScroll: true })
+  }, [isHidden])
+
+  // Tabbing into the list before a row had the focus (a link to a call, a
+  // reload) lands on the open call rather than on the first one
+  const focusOpenCallOnEntry = (event: FocusEvent) => {
+    if (event.target !== listRef.current) return
+    const row = rowOf(listRef.current, selectedCallId)
+    if (!row) return
+    event.stopPropagation()
+    row.focus()
+  }
+
+  const openCall = (callId: string, title: string) => {
+    callsUiStore.openedCallId = callId
+    navigateTo('call', callId, {
+      state: openedFromListState(window.location.pathname),
+    })
+    // wide screens keep the focus in the list: say what opened
+    if (isWide) announce(tCalls('detail.opened', { title }))
+  }
+
+  // the results of the previous search, until the new ones come
+  const isSearching = callsQuery.isPlaceholderData && callsQuery.isFetching
 
   return (
     <section
@@ -202,22 +279,37 @@ export const CallListPanel = ({
           >
             {t('title')}
           </h2>
-          <Button
-            variant="primary"
-            square
-            aria-label={t('newCall')}
-            tooltip={t('newCall')}
-            isDisabled={isCreating}
-            onPress={startCall}
-            className={css({ borderRadius: '12px!' })}
+          {/* narrow screens have the «Новый звонок» card right below */}
+          <div
+            className={css({ display: 'none', md: { display: 'contents' } })}
           >
-            <RiAddLine size={22} aria-hidden="true" />
-          </Button>
+            <Button
+              variant="primary"
+              square
+              aria-label={t('newCall')}
+              tooltip={t('newCall')}
+              isDisabled={isCreating}
+              onPress={startCall}
+              className={css({ borderRadius: '12px!' })}
+            >
+              <RiAddLine size={22} aria-hidden="true" />
+            </Button>
+          </div>
         </div>
+        {hasCreateError && (
+          <Text
+            variant="warning"
+            role="alert"
+            margin={false}
+            className={css({ display: 'none', md: { display: 'block' } })}
+          >
+            {tCalls('home.createError')}
+          </Text>
+        )}
         <div className={css({ md: { display: 'none' } })}>
           <HomeActions compact />
         </div>
-        <CallsSearchField />
+        <CallsSearchField isSearching={isSearching} />
       </div>
       {callsQuery.isLoading ? (
         <CenteredState>
@@ -240,56 +332,63 @@ export const CallListPanel = ({
           </Button>
         </CenteredState>
       ) : (
-        <GridList
-          ref={listRef}
-          aria-label={t('label')}
-          onScroll={(event) => {
-            savedScrollTop = event.currentTarget.scrollTop
-          }}
-          renderEmptyState={() => (
-            <CenteredState>
-              <Text variant="smNote" margin={false} wrap="balance">
-                {query ? t('noResults') : t('empty')}
-              </Text>
-            </CenteredState>
-          )}
-          className={css({
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.125rem',
-            paddingX: '0.5rem',
-            paddingBottom: '1rem',
-            outline: 'none',
-          })}
+        // catches the focus entering the list (see focusOpenCallOnEntry)
+        <div
+          className={css({ display: 'contents' })}
+          onFocusCapture={focusOpenCallOnEntry}
         >
-          {calls.map((call) => (
-            <CallListItem
-              key={call.id}
-              call={call}
-              now={now}
-              isCurrent={call.id === selectedCallId}
-              onOpen={(callId) => navigateTo('call', callId)}
-            />
-          ))}
-          {callsQuery.hasNextPage && (
-            <GridListLoadMoreItem
-              onLoadMore={() => {
-                if (!callsQuery.isFetchingNextPage) callsQuery.fetchNextPage()
-              }}
-              isLoading={callsQuery.isFetchingNextPage}
-              className={css({
-                display: 'flex',
-                justifyContent: 'center',
-                paddingY: '0.75rem',
-              })}
-            >
-              <Spinner size={22} />
-            </GridListLoadMoreItem>
-          )}
-        </GridList>
+          <GridList
+            ref={listRef}
+            aria-label={t('label')}
+            onScroll={(event) => {
+              // a hidden list reads 0
+              if (!isHidden) savedScrollTop = event.currentTarget.scrollTop
+            }}
+            renderEmptyState={() => (
+              <CenteredState>
+                <Text variant="smNote" margin={false} wrap="balance">
+                  {query ? t('noResults') : t('empty')}
+                </Text>
+              </CenteredState>
+            )}
+            className={css({
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.125rem',
+              paddingX: '0.5rem',
+              paddingBottom: '1rem',
+              outline: 'none',
+            })}
+          >
+            {calls.map((call) => (
+              <CallListItem
+                key={call.id}
+                call={call}
+                now={now}
+                isCurrent={call.id === selectedCallId}
+                onOpen={openCall}
+              />
+            ))}
+            {callsQuery.hasNextPage && !callsQuery.isPlaceholderData && (
+              <GridListLoadMoreItem
+                onLoadMore={() => {
+                  if (!callsQuery.isFetchingNextPage) callsQuery.fetchNextPage()
+                }}
+                isLoading={callsQuery.isFetchingNextPage}
+                className={css({
+                  display: 'flex',
+                  justifyContent: 'center',
+                  paddingY: '0.75rem',
+                })}
+              >
+                <Spinner size={22} />
+              </GridListLoadMoreItem>
+            )}
+          </GridList>
+        </div>
       )}
     </section>
   )

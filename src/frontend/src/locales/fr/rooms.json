@@ -450,7 +450,9 @@
     "escapeHint": "Appuyez sur Échap pour fermer"
   },
   "chat": {
-    "disclaimer": "Les messages sont visibles par les participants présents dans l'appel. Ils sont enregistrés dans l'historique de l'appel, visible par ses participants.",
+    "disclaimer": "Les messages sont visibles par les participants uniquement au moment de\nleur envoi. Tous les messages sont supprimés à la fin de l'appel.",
+    "disclaimerSaved": "Les messages sont visibles par les participants présents dans l'appel. Ils sont enregistrés dans l'historique de l'appel, visible par ses participants.",
+    "disclaimerSavedWithAdmins": "Les messages sont visibles par les participants présents dans l'appel. Ils sont enregistrés dans l'historique de l'appel, visible par ses participants ainsi que par les propriétaires et administrateurs de la salle.",
     "messagesLog": "Messages du chat"
   },
   "moreTools": {

@@ -1,6 +1,7 @@
 """Serializers of the calls application."""
 
 from django.conf import settings
+from django.utils.crypto import salted_hmac
 
 from rest_framework import serializers
 
@@ -90,6 +91,9 @@ class CallListSerializer(serializers.ModelSerializer):
     is_active = serializers.BooleanField(read_only=True)
     participants = serializers.SerializerMethodField()
     participants_count = serializers.IntegerField(read_only=True)
+    # whether the user is one of the participants (who may be past the first
+    # ones listed), so that the frontend counts the others right
+    participated = serializers.BooleanField(read_only=True)
     last_message = serializers.SerializerMethodField()
     messages_count = serializers.IntegerField(read_only=True)
     unread_count = serializers.IntegerField(read_only=True)
@@ -107,6 +111,7 @@ class CallListSerializer(serializers.ModelSerializer):
             "is_active",
             "participants",
             "participants_count",
+            "participated",
             "last_message",
             "messages_count",
             "unread_count",
@@ -235,12 +240,25 @@ class CallDetailSerializer(CallListSerializer):
 class CallMessageSerializer(serializers.ModelSerializer):
     """A chat message of a call."""
 
+    sender_key = serializers.SerializerMethodField()
     sender_is_me = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatMessage
-        fields = ["id", "sender_name", "sender_is_me", "text", "sent_at"]
+        fields = ["id", "sender_key", "sender_name", "sender_is_me", "text", "sent_at"]
         read_only_fields = fields
+
+    def get_sender_key(self, message):
+        """The same opaque key for the messages of one sender in a call.
+
+        Two senders may share a name ("Гость"): the frontend groups messages
+        by this key. It is a keyed hash, so the LiveKit identity is not shown
+        and the key of a sender differs from one call to the next.
+        """
+        return salted_hmac(
+            "calls.CallMessageSerializer.sender_key",
+            f"{message.session_id}:{message.sender_identity}",
+        ).hexdigest()[:16]
 
     def get_sender_is_me(self, message):
         """Whether the user sent the message."""
