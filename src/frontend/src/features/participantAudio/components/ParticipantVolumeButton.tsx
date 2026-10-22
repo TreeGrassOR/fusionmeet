@@ -2,11 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Dialog, DialogTrigger } from 'react-aria-components'
 import { FocusScope } from 'react-aria'
 import type { Participant } from 'livekit-client'
-import {
-  RiVolumeDownLine,
-  RiVolumeMuteLine,
-  RiVolumeUpLine,
-} from '@remixicon/react'
+import { RiVolumeMuteLine, RiVolumeUpLine } from '@remixicon/react'
 import { css } from '@/styled-system/css'
 import { VStack } from '@/styled-system/jsx'
 import { Box, Button } from '@/primitives'
@@ -14,6 +10,7 @@ import { StyledPopover } from '@/primitives/StyledPopover'
 import { toggleParticipantMutedForMe } from '@/stores/participantAudio'
 import { useParticipantAudio } from '../hooks/useParticipantAudio'
 import { ParticipantVolumeSlider } from './ParticipantVolumeSlider'
+import { VolumeIcon } from './VolumeIcon'
 
 /**
  * Participant tile button opening a popover with the volume slider and the
@@ -32,12 +29,6 @@ export const ParticipantVolumeButton = ({
   const name = participant.name || participant.identity
   const label = t('tileButton', { name })
 
-  const Icon = playback.isMuted
-    ? RiVolumeMuteLine
-    : playback.volume < 1
-      ? RiVolumeDownLine
-      : RiVolumeUpLine
-
   return (
     <DialogTrigger onOpenChange={onOpenChange}>
       <Button
@@ -47,7 +38,7 @@ export const ParticipantVolumeButton = ({
         aria-label={label}
         tooltip={label}
       >
-        <Icon aria-hidden />
+        <VolumeIcon playback={playback.microphone} />
       </Button>
       <StyledPopover>
         <Dialog

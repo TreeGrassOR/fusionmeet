@@ -4,10 +4,10 @@ import { CollapsibleControl, CollapsibleControls } from '../PipControlBar'
 import { RiArrowUpLine, RiEmotionLine, RiHand } from '@remixicon/react'
 import { menuRecipe } from '@/primitives/menuRecipe.ts'
 import { useReactionsToolbar } from '@/features/reactions/hooks/useReactionsToolbar'
-import { useRoomContext, useTrackToggle } from '@livekit/components-react'
+import { useRoomContext } from '@livekit/components-react'
 import { useRaisedHand } from '@/features/rooms/livekit/hooks/useRaisedHand'
 import { useTranslation } from 'react-i18next'
-import { Track } from 'livekit-client'
+import { useScreenShareToggle } from '@/features/rooms/livekit/hooks/useScreenShareToggle'
 
 type PipOverflowItemsProps = {
   overflowControls: Set<CollapsibleControl>
@@ -21,11 +21,8 @@ export const PipOptionsMenuItems = ({
   const { isHandRaised, toggleRaisedHand } = useRaisedHand({
     participant: room.localParticipant,
   })
-  const { buttonProps: screenShareProps, enabled: isScreenSharing } =
-    useTrackToggle({
-      source: Track.Source.ScreenShare,
-      captureOptions: { audio: true, selfBrowserSurface: 'include' },
-    })
+  const { toggle: toggleScreenShare, enabled: isScreenSharing } =
+    useScreenShareToggle()
   const { toggle: toggleReactions } = useReactionsToolbar()
   const itemClass = menuRecipe({ icon: true, variant: 'dark' }).item
 
@@ -45,11 +42,7 @@ export const PipOptionsMenuItems = ({
       )}
       {overflowControls.has(CollapsibleControls.SCREEN_SHARE) && (
         <MenuItem
-          onAction={() =>
-            screenShareProps.onClick?.(
-              {} as React.MouseEvent<HTMLButtonElement>
-            )
-          }
+          onAction={() => void toggleScreenShare()}
           className={itemClass}
         >
           <RiArrowUpLine size={20} />

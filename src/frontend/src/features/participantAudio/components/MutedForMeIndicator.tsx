@@ -15,7 +15,7 @@ export const MutedForMeIndicator = ({
   const { t } = useTranslation('participantAudio', { useSuspense: false })
   const { playback } = useParticipantAudio(participant.identity)
 
-  if (participant.isLocal || !playback.isMuted) return null
+  if (participant.isLocal || !playback.microphone.isMuted) return null
 
   return (
     <div

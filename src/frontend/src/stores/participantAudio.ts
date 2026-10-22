@@ -3,8 +3,9 @@ import { STORAGE_KEYS } from '@/utils/storageKeys'
 
 /**
  * Local, per-identity playback settings of remote participants ("volume" and
- * "mute for me"). They only affect what the current user hears and are kept
- * in localStorage, keyed by the LiveKit participant identity.
+ * "mute for me", for the voice and for the screen share audio). They only
+ * affect what the current user hears and are kept in localStorage, keyed by
+ * the LiveKit participant identity.
  */
 
 export const DEFAULT_PARTICIPANT_VOLUME = 1
@@ -15,13 +16,19 @@ export const MAX_PARTICIPANT_VOLUME_WITHOUT_BOOST = 1
 /** Oldest entries are dropped beyond this count to keep the storage small. */
 export const MAX_STORED_PARTICIPANTS = 200
 
-const STORAGE_VERSION = 1
+// 2: screen share audio fields. Version 1 entries load with their defaults,
+// and an older build reading version 2 only loses them.
+const STORAGE_VERSION = 2
 
 export type ParticipantAudioSettings = {
-  /** Gain applied to the participant audio, 1 = 100 % */
+  /** Gain applied to the participant microphone, 1 = 100 % */
   volume: number
-  /** Participant is silenced for the current user only */
+  /** Participant (voice and screen share audio) is silenced for the current user only */
   mutedForMe: boolean
+  /** Gain applied to the participant screen share audio, 1 = 100 % */
+  screenShareVolume: number
+  /** Screen share audio only is silenced for the current user */
+  screenShareMuted: boolean
 }
 
 export type StoredParticipantAudioSettings = ParticipantAudioSettings & {
@@ -43,6 +50,8 @@ export const DEFAULT_PARTICIPANT_AUDIO_SETTINGS: Readonly<ParticipantAudioSettin
   Object.freeze({
     volume: DEFAULT_PARTICIPANT_VOLUME,
     mutedForMe: false,
+    screenShareVolume: DEFAULT_PARTICIPANT_VOLUME,
+    screenShareMuted: false,
   })
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -77,7 +86,20 @@ export const getMaxParticipantVolume = (isVolumeBoostEnabled: boolean) =>
 
 export const isDefaultParticipantAudioSettings = (
   settings: Readonly<ParticipantAudioSettings>
-) => settings.volume === DEFAULT_PARTICIPANT_VOLUME && !settings.mutedForMe
+) =>
+  settings.volume === DEFAULT_PARTICIPANT_VOLUME &&
+  !settings.mutedForMe &&
+  settings.screenShareVolume === DEFAULT_PARTICIPANT_VOLUME &&
+  !settings.screenShareMuted
+
+const isSameParticipantAudioSettings = (
+  a: Readonly<ParticipantAudioSettings>,
+  b: Readonly<ParticipantAudioSettings>
+) =>
+  a.volume === b.volume &&
+  a.mutedForMe === b.mutedForMe &&
+  a.screenShareVolume === b.screenShareVolume &&
+  a.screenShareMuted === b.screenShareMuted
 
 /**
  * Keeps the `max` most recently updated entries.
@@ -118,6 +140,9 @@ export const parseParticipantAudioState = (
     const settings: StoredParticipantAudioSettings = {
       volume: clampVolume(value.volume),
       mutedForMe: value.mutedForMe === true,
+      // absent from version 1 entries: defaults
+      screenShareVolume: clampVolume(value.screenShareVolume),
+      screenShareMuted: value.screenShareMuted === true,
       updatedAt:
         typeof value.updatedAt === 'number' && Number.isFinite(value.updatedAt)
           ? value.updatedAt
@@ -152,22 +177,49 @@ export const getParticipantAudioSettings = (
     ? state.participants[identity]
     : undefined
   if (!stored) return { ...DEFAULT_PARTICIPANT_AUDIO_SETTINGS }
-  return { volume: stored.volume, mutedForMe: stored.mutedForMe }
+  return {
+    volume: stored.volume,
+    mutedForMe: stored.mutedForMe,
+    screenShareVolume: stored.screenShareVolume,
+    screenShareMuted: stored.screenShareMuted,
+  }
 }
 
-export type ParticipantPlayback = {
+export type SourcePlayback = {
   /** Gain to apply, within the bounds the browser supports */
   volume: number
-  /** Whether the participant must be silenced (muted for me, or volume 0) */
+  /** Whether the source must be silenced (muted for me, or volume 0) */
   isMuted: boolean
 }
 
+export type ParticipantPlayback = {
+  microphone: SourcePlayback
+  screenShareAudio: SourcePlayback
+}
+
+/**
+ * "Mute for me" silences both sources; the screen share mute keeps the
+ * microphone audible.
+ */
 export const resolveParticipantPlayback = (
   settings: Readonly<ParticipantAudioSettings>,
   maxVolume: number
 ): ParticipantPlayback => {
-  const volume = clampVolume(settings.volume, maxVolume)
-  return { volume, isMuted: settings.mutedForMe || volume === 0 }
+  const microphone = clampVolume(settings.volume, maxVolume)
+  const screenShareAudio = clampVolume(settings.screenShareVolume, maxVolume)
+  return {
+    microphone: {
+      volume: microphone,
+      isMuted: settings.mutedForMe || microphone === 0,
+    },
+    screenShareAudio: {
+      volume: screenShareAudio,
+      isMuted:
+        settings.mutedForMe ||
+        settings.screenShareMuted ||
+        screenShareAudio === 0,
+    },
+  }
 }
 
 const getStorage = (): Storage | undefined => {
@@ -212,13 +264,12 @@ const updateParticipantAudioSettings = (
   const next: ParticipantAudioSettings = {
     volume: clampVolume(patch.volume ?? current.volume),
     mutedForMe: patch.mutedForMe ?? current.mutedForMe,
+    screenShareVolume: clampVolume(
+      patch.screenShareVolume ?? current.screenShareVolume
+    ),
+    screenShareMuted: patch.screenShareMuted ?? current.screenShareMuted,
   }
-  if (
-    next.volume === current.volume &&
-    next.mutedForMe === current.mutedForMe
-  ) {
-    return
-  }
+  if (isSameParticipantAudioSettings(next, current)) return
   if (isDefaultParticipantAudioSettings(next)) {
     delete participantAudioStore.participants[identity]
     return
@@ -245,4 +296,21 @@ export const toggleParticipantMutedForMe = (identity: string) =>
   setParticipantMutedForMe(
     identity,
     !getParticipantAudioSettings(participantAudioStore, identity).mutedForMe
+  )
+
+export const setParticipantScreenShareVolume = (
+  identity: string,
+  screenShareVolume: number
+) => updateParticipantAudioSettings(identity, { screenShareVolume })
+
+export const setParticipantScreenShareMuted = (
+  identity: string,
+  screenShareMuted: boolean
+) => updateParticipantAudioSettings(identity, { screenShareMuted })
+
+export const toggleParticipantScreenShareMuted = (identity: string) =>
+  setParticipantScreenShareMuted(
+    identity,
+    !getParticipantAudioSettings(participantAudioStore, identity)
+      .screenShareMuted
   )

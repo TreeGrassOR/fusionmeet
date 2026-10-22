@@ -16,9 +16,10 @@
 | `src/backend/calls/` | Django-приложение «Звонки»: история звонков по вебхукам LiveKit (свой URL `calls/webhooks-livekit/`, второй в `webhook.urls`), сохранение сообщений чата от клиентов, список и карточка звонка, расшифровка звонка для участников, название звонков комнаты |
 | `src/mail/mjml/transcript_ready.mjml` | письмо инициатору о готовой расшифровке |
 | `src/frontend/src/features/transcription/` | кнопки «Расшифровка» и «Запись», индикатор, страница «Мои записи и расшифровки», выбор модели распознавания |
-| `src/frontend/src/primitives/Slider.tsx`, `src/frontend/src/stores/participantAudio.ts`, компоненты громкости в `features/participants`, `features/participantTile`, `features/rooms` | громкость участников |
+| `src/frontend/src/primitives/Slider.tsx`, `src/frontend/src/stores/participantAudio.ts`, компоненты громкости в `features/participants`, `features/participantTile`, `features/rooms` | громкость участников и, отдельно, звука их трансляции |
+| `src/frontend/src/features/rooms/livekit/utils/screenShare.ts`, `startScreenShare.ts`, `hooks/useScreenShareToggle.ts`, `src/frontend/src/features/notifications/components/ToastScreenShareAudioNotShared.tsx` | демонстрация экрана: захват без звука самой встречи (`restrictOwnAudio`, иначе звук не передаётся и показывается уведомление), публикация в VP8 с simulcast и стереозвуком |
 | `src/frontend/src/features/rooms/livekit/components/ConnectionStateToast.tsx` | переводимая замена уведомления о подключении из `@livekit/components-react` (там тексты зашиты по-английски) |
-| `src/frontend/src/locales/*/transcription.json`, `*/participantAudio.json` | строки новых функций (отдельные пространства имён, чтобы не трогать файлы upstream) |
+| `src/frontend/src/locales/*/transcription.json`, `*/participantAudio.json`, `*/screenShare.json` | строки новых функций (отдельные пространства имён, чтобы не трогать файлы upstream) |
 | `src/frontend/src/locales/ru/`, `src/backend/locale/ru_RU/`, `src/summary/summary/core/locales/ru.py` | русская локализация |
 | `bin/check-i18n-ru` | проверка, что ключи `ru` совпадают с `en` |
 | `docs/features/gigaam-transcription.md` | описание расшифровки по участникам |
@@ -45,7 +46,9 @@
 | `src/frontend/src/locales/{en,fr,de,es,nl}/rooms.json` | ключи `controls.startMedia.*` и `connectionState.*` для двух строк выше |
 | `src/frontend/src/features/rooms/components/Conference.tsx` | `webAudioMix` там, где браузер поддерживает усиление выше 100 % |
 | `src/frontend/src/features/participants/components/menu/ParticipantMenu.tsx`, `ParticipantMenuButton.tsx` | ползунок громкости и «Выключить звук для меня» |
-| `src/frontend/src/features/participantTile/components/ParticipantMetadata.tsx`, `participantTileFocus/ParticipantTileFocus.tsx` | кнопка громкости на плитке и значок «звук выключен для вас» |
+| `src/frontend/src/features/participantTile/components/ParticipantMetadata.tsx`, `participantTileFocus/ParticipantTileFocus.tsx` | кнопка громкости на плитке и значок «звук выключен для вас»; на плитке трансляции со звуком — громкость трансляции и значок «звук трансляции выключен для вас» |
+| `src/frontend/src/features/rooms/livekit/components/controls/ScreenShareToggle.tsx`, `src/frontend/src/features/pip/components/controls/PipOptionsMenuItems.tsx` | запуск демонстрации через общий `useScreenShareToggle` (вместо `captureOptions: { audio: true, selfBrowserSurface: 'include' }`) |
+| `src/frontend/src/features/notifications/NotificationType.ts`, `components/ToastRegion.tsx` | уведомление «Звук экрана не передаётся» |
 | `src/frontend/src/primitives/index.ts`, `src/frontend/src/utils/storageKeys.tsx` | экспорт `Slider`, ключ localStorage |
 | `src/frontend/src/i18n/init.ts`, `i18n/useLanguageLabels.ts`, `utils/languages.ts`, `index.html`, `i18next-parser.config.json` | русский язык, `fallbackLng = 'ru'` |
 | `src/frontend/package.json` | скрипт `i18n:check-ru` |

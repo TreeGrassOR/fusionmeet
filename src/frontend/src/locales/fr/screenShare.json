@@ -1,0 +1,7 @@
+{
+  "audioNotShared": {
+    "description": "Votre navigateur ne peut pas retirer la voix des autres participants du son de l’écran : ils s’entendraient une seconde fois. Pour présenter une vidéo avec le son, choisissez un onglet du navigateur et activez le partage de l’audio de l’onglet.",
+    "title": "Le son de l’écran n’est pas partagé",
+    "updateBrowser": "Vous pouvez aussi mettre à jour votre navigateur : Chrome et Edge savent retirer le son de la réunion depuis la version 141 (Windows 11, macOS 14.2 et versions ultérieures)."
+  }
+}
