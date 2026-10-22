@@ -503,7 +503,7 @@
     "linkAriaLabel": "Abrir la documentación sobre la transcripción - se abre en una nueva ventana",
     "notAdminOrOwner": {
       "heading": "Acceso restringido",
-      "body": "Por razones de seguridad, solo el creador o un administrador de la reunión puede iniciar una transcripción (beta).",
+      "body": "Por razones de seguridad, solo el creador o un administrador de la reunión puede iniciar una transcripción.",
       "linkMore": "Abrir la documentación",
       "linkAriaLabel": "Abrir la documentación sobre el acceso a la transcripción - se abre en una nueva ventana",
       "dividerLabel": "O",
@@ -519,7 +519,7 @@
     },
     "notLoggedIn": {
       "heading": "Inicia sesión para transcribir",
-      "body": "En esta reunión, cualquier participante con sesión iniciada puede iniciar una transcripción (beta).",
+      "body": "En esta reunión, cualquier participante con sesión iniciada puede iniciar una transcripción.",
       "linkMore": "Abrir la documentación",
       "linkAriaLabel": "Abrir la documentación sobre el acceso a la transcripción - se abre en una nueva ventana",
       "dividerLabel": "O",
@@ -574,7 +574,7 @@
     },
     "notAdminOrOwner": {
       "heading": "Acceso restringido",
-      "body": "Por razones de seguridad, solo el creador o un administrador de la reunión puede iniciar una grabación (beta).",
+      "body": "Por razones de seguridad, solo el creador o un administrador de la reunión puede iniciar una grabación.",
       "linkMore": "Abrir la documentación",
       "linkAriaLabel": "Abrir la documentación sobre el acceso a la grabación - se abre en una nueva ventana",
       "dividerLabel": "O",
@@ -590,7 +590,7 @@
     },
     "notLoggedIn": {
       "heading": "Inicia sesión para grabar",
-      "body": "En esta reunión, cualquier participante con sesión iniciada puede iniciar una grabación (beta).",
+      "body": "En esta reunión, cualquier participante con sesión iniciada puede iniciar una grabación.",
       "linkMore": "Abrir la documentación",
       "linkAriaLabel": "Abrir la documentación sobre el acceso a la grabación - se abre en una nueva ventana",
       "dividerLabel": "O",

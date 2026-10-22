@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useSnapshot } from 'valtio'
 import {
   createLocalAudioTrack,
@@ -27,6 +34,10 @@ import {
   userChoicesStore,
 } from '@/stores/userChoices'
 import { useSyncTrackDeviceId } from './useSyncTrackDeviceId'
+import {
+  type JoinWarmupKinds,
+  resolveJoinWarmupKinds,
+} from '@/features/rooms/utils/joinWarmupKinds'
 
 // Module-level: effect dependencies, must be referentially stable.
 const disableAudio = () => saveAudioInputEnabled(false)
@@ -47,7 +58,71 @@ type WarmupState = {
  * to avoid a second dialog, but a microphone that stalls or fails (e.g.
  * OS-level block on Firefox) must not hold the camera hostage — that is
  * how LiveKit behaves in-room (independent per-kind acquisitions).
+ *
+ * Only the kinds from `resolveJoinWarmupKinds` are requested (not those
+ * turned off for this entry, nor those already allowed). The others are
+ * ready at once, so turning one on later still acquires its track.
  */
+export async function warmupPermissions(
+  { audio, video }: JoinWarmupKinds,
+  setState: Dispatch<SetStateAction<WarmupState>>
+): Promise<void> {
+  const bothReady = () => setState({ audioReady: true, videoReady: true })
+
+  if (!audio || !video) {
+    setState((current) => ({
+      audioReady: current.audioReady || !audio,
+      videoReady: current.videoReady || !video,
+    }))
+  }
+  if (!audio && !video) {
+    return
+  }
+  // Set when only one kind is requested: its failure needs no retry.
+  const kind: PermissionKind | undefined =
+    audio && video ? undefined : audio ? 'microphone' : 'camera'
+
+  try {
+    stopAll(await navigator.mediaDevices.getUserMedia({ audio, video }))
+    noteDeviceReady(kind)
+    bothReady()
+  } catch (error) {
+    if (
+      kind ||
+      (getMediaDeviceFailure(error as Error) ===
+        MediaDeviceFailure.PermissionDenied &&
+        !isSystemPermissionError(error))
+    ) {
+      // One kind: the error already names the device. Both kinds:
+      // retrying after a dismissal would show a second dialog.
+      onMediaPermissionError(error as Error, kind)
+      bothReady()
+      return
+    }
+    // Combined requests fail atomically (e.g. missing webcam fails the
+    // mic too, and an OS-level block on one device fails both) — retry
+    // per kind to know which device is affected; permission is settled
+    // at the browser level, no dialog risk. The retries run in parallel
+    // and settle readiness independently.
+    void navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        stopAll(stream)
+        noteDeviceReady('microphone')
+      })
+      .catch((e) => onMediaPermissionError(e as Error, 'microphone'))
+      .finally(() => setState((current) => ({ ...current, audioReady: true })))
+    void navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((stream) => {
+        stopAll(stream)
+        noteDeviceReady('camera')
+      })
+      .catch((e) => onMediaPermissionError(e as Error, 'camera'))
+      .finally(() => setState((current) => ({ ...current, videoReady: true })))
+  }
+}
+
 function useWarmupPermissions(): WarmupState {
   const [state, setState] = useState<WarmupState>({
     audioReady: false,
@@ -61,57 +136,10 @@ function useWarmupPermissions(): WarmupState {
     }
     started.current = true
 
-    const bothReady = () => setState({ audioReady: true, videoReady: true })
-
-    const warmup = async () => {
-      try {
-        stopAll(
-          await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: true,
-          })
-        )
-        noteDeviceReady()
-        bothReady()
-      } catch (error) {
-        if (
-          getMediaDeviceFailure(error as Error) ===
-            MediaDeviceFailure.PermissionDenied &&
-          !isSystemPermissionError(error)
-        ) {
-          // Retrying after a dismissal would show a second dialog.
-          onMediaPermissionError(error as Error)
-          bothReady()
-          return
-        }
-        // Combined requests fail atomically (e.g. missing webcam fails the
-        // mic too, and an OS-level block on one device fails both) — retry
-        // per kind to know which device is affected; permission is settled
-        // at the browser level, no dialog risk. The retries run in parallel
-        // and settle readiness independently.
-        void navigator.mediaDevices
-          .getUserMedia({ audio: true })
-          .then((stream) => {
-            stopAll(stream)
-            noteDeviceReady('microphone')
-          })
-          .catch((e) => onMediaPermissionError(e as Error, 'microphone'))
-          .finally(() =>
-            setState((current) => ({ ...current, audioReady: true }))
-          )
-        void navigator.mediaDevices
-          .getUserMedia({ video: true })
-          .then((stream) => {
-            stopAll(stream)
-            noteDeviceReady('camera')
-          })
-          .catch((e) => onMediaPermissionError(e as Error, 'camera'))
-          .finally(() =>
-            setState((current) => ({ ...current, videoReady: true }))
-          )
-      }
-    }
-    warmup()
+    // Room applied this entry's join defaults before the join screen mounted.
+    void resolveJoinWarmupKinds(userChoicesStore).then((kinds) =>
+      warmupPermissions(kinds, setState)
+    )
   }, [])
 
   return state

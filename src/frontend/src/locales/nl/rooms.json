@@ -504,7 +504,7 @@
     "linkAriaLabel": "Documentatie over transcriptie openen - opent in nieuw venster",
     "notAdminOrOwner": {
       "heading": "Toegang beperkt",
-      "body": "Om veiligheidsredenen kan alleen de maker of een beheerder van de vergadering een transcriptie starten (beta).",
+      "body": "Om veiligheidsredenen kan alleen de maker of een beheerder van de vergadering een transcriptie starten.",
       "linkMore": "Documentatie openen",
       "linkAriaLabel": "Documentatie over transcriptietoegang openen - opent in nieuw venster",
       "dividerLabel": "OF",
@@ -520,7 +520,7 @@
     },
     "notLoggedIn": {
       "heading": "Log in om te transcriberen",
-      "body": "In deze vergadering kan elke ingelogde deelnemer een transcriptie starten (beta).",
+      "body": "In deze vergadering kan elke ingelogde deelnemer een transcriptie starten.",
       "linkMore": "Documentatie openen",
       "linkAriaLabel": "Documentatie over transcriptietoegang openen - opent in nieuw venster",
       "dividerLabel": "OF",
@@ -575,7 +575,7 @@
     },
     "notAdminOrOwner": {
       "heading": "Toegang beperkt",
-      "body": "Om veiligheidsredenen kan alleen de maker of een beheerder van de vergadering een opname starten (beta).",
+      "body": "Om veiligheidsredenen kan alleen de maker of een beheerder van de vergadering een opname starten.",
       "linkMore": "Documentatie openen",
       "linkAriaLabel": "Documentatie over opnametoegang openen - opent in nieuw venster",
       "dividerLabel": "OF",
@@ -591,7 +591,7 @@
     },
     "notLoggedIn": {
       "heading": "Log in om op te nemen",
-      "body": "In deze vergadering kan elke ingelogde deelnemer een opname starten (beta).",
+      "body": "In deze vergadering kan elke ingelogde deelnemer een opname starten.",
       "linkMore": "Documentatie openen",
       "linkAriaLabel": "Documentatie over opnametoegang openen - opent in nieuw venster",
       "dividerLabel": "OF",
