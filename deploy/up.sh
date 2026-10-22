@@ -256,5 +256,19 @@ else
   ok "самостоятельная регистрация выключена: пользователей создаёт add-user.sh"
 fi
 
+step "Адреса входа в Keycloak"
+# Like the registration setting: the client URLs come from the realm JSON only on
+# the first start, so a changed BASE_DOMAIN (new IP) would break the login.
+meet_url="https://meet.$(env_get "$FM_ENV_FILE" BASE_DOMAIN)"
+# shellcheck disable=SC2016  # expanded by bash inside the container
+kc_admin '
+client_id=$("$kcadm" get clients --config "$cfg" -r meet -q clientId=meet --fields id --format csv --noquotes)
+[ -n "$client_id" ] || { echo "клиент meet не найден в realm meet" >&2; exit 1; }
+"$kcadm" update "clients/$client_id" --config "$cfg" -r meet \
+  -s "rootUrl=$1" -s "redirectUris=[\"$1/*\"]" -s "webOrigins=[\"$1\"]" \
+  -s "attributes.\"post.logout.redirect.uris\"=$1/*"
+' "$meet_url" || die "не удалось обновить адреса клиента meet в Keycloak (см. сообщение выше)"
+ok "вход через Keycloak возвращает на $meet_url"
+
 fm_compose ps
 print_summary

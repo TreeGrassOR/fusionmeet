@@ -5,7 +5,7 @@ Linux-сервере с одной видеокартой NVIDIA через `doc
 как отдельный проект compose `fusionmeet`: его контейнеры, тома и сеть называются
 `fusionmeet-…` и не пересекаются с другими контейнерами на сервере (например, с vLLM).
 
-Адреса строятся из `BASE_DOMAIN` (по умолчанию `213-141-132-74.sslip.io`):
+Адреса строятся из `BASE_DOMAIN` (по умолчанию `94-29-40-2.sslip.io`):
 
 | Адрес | Что это |
 |---|---|
@@ -92,7 +92,7 @@ sudo ufw allow from 172.16.0.0/12 to any port 7880 proto tcp   # Caddy, egress �
 
 ## Домашняя сеть: NAT loopback
 
-Имена `*.213-141-132-74.sslip.io` указывают на внешний IP. Устройство внутри
+Имена `*.94-29-40-2.sslip.io` указывают на внешний IP. Устройство внутри
 домашней сети обращается к внешнему IP своего же роутера, и это работает, только если
 роутер умеет NAT loopback (hairpin NAT). Многие домашние роутеры не умеют.
 
@@ -102,12 +102,12 @@ sudo ufw allow from 172.16.0.0/12 to any port 7880 proto tcp   # Caddy, egress �
 - **Сайт (HTTPS и WebSocket).** Без NAT loopback браузер в домашней сети не откроет
   `https://meet.<BASE_DOMAIN>/`. Нужна одна из мер:
   - локальный DNS на роутере (dnsmasq, OpenWrt, Keenetic, Pi-hole): все имена
-    `*.213-141-132-74.sslip.io` → `LAN_IP`. Для dnsmasq:
-    `address=/213-141-132-74.sslip.io/192.168.1.10`;
+    `*.94-29-40-2.sslip.io` → `LAN_IP`. Для dnsmasq:
+    `address=/94-29-40-2.sslip.io/192.168.1.14`;
   - или на каждом компьютере строки в hosts (`/etc/hosts`,
     `C:\Windows\System32\drivers\etc\hosts`):
     ```
-    192.168.1.10 meet.213-141-132-74.sslip.io id.213-141-132-74.sslip.io livekit.213-141-132-74.sslip.io
+    192.168.1.14 meet.94-29-40-2.sslip.io id.94-29-40-2.sslip.io livekit.94-29-40-2.sslip.io
     ```
   - или включить NAT loopback на роутере, если он это умеет.
 
@@ -314,6 +314,15 @@ asr отключает эту проверку (`NVIDIA_DISABLE_REQUIRE=true` в
   nginx берёт их из тома Caddy и перечитывает раз в сутки
   (`fusionmeet-nginx-reload.timer`).
 - HTTP/3 (443/udp) в этом режиме не используется.
+
+### Сменился внешний IP
+
+1. В `deploy/.env` поменяйте `BASE_DOMAIN` (IP через дефисы, например
+   `94-29-40-2.sslip.io`), `PUBLIC_IP` и, если изменился, `LAN_IP`.
+2. На роутере пробросьте на `LAN_IP` порты 80/tcp, 443/tcp, 7881/tcp и 7882/udp.
+3. `sudo ./deploy/up.sh`: Caddy получит сертификаты на новые имена, nginx сервера
+   (если FusionMeet за ним) получит новые имена, а Keycloak — новые адреса возврата
+   после входа. Учётные записи, комнаты, записи и расшифровки сохраняются.
 
 ### Сертификаты не выпускаются
 
