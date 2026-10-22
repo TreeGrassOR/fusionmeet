@@ -123,6 +123,8 @@ const RecordingDownload = () => {
               alt={''}
               className={css({
                 maxHeight: '309px',
+                // the illustration has an opaque white background
+                _dark: { borderRadius: 16 },
               })}
             />
             <H lvl={1} centered>

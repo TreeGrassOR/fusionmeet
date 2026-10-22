@@ -25,7 +25,9 @@ const Header = styled('button', {
     fontSize: '1rem',
     transition: 'background 200ms',
     borderTopRadius: '7px', // container radius (8) minus its 1px border
-    _hover: { backgroundColor: 'surface.hover' },
+    _hover: {
+      backgroundColor: { base: 'greyscale.50', _dark: 'surface.hover' },
+    },
   },
   variants: {
     isOpen: { false: { borderRadius: '7px' } },

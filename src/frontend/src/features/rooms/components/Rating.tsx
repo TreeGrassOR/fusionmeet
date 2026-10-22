@@ -10,7 +10,7 @@ import { captureEvent } from '@/features/analytics/telemetry'
 const Card = styled('div', {
   base: {
     border: '1px solid',
-    borderColor: 'border',
+    borderColor: { base: 'gray.300', _dark: 'border' },
     padding: '1rem',
     marginTop: '1.5rem',
     borderRadius: '0.25rem',
@@ -25,7 +25,7 @@ const Bar = styled('div', {
   base: {
     display: 'flex',
     border: '2px solid',
-    borderColor: 'border',
+    borderColor: { base: 'gray.300', _dark: 'border' },
     borderRadius: '8px',
     overflowY: 'hidden',
     scrollbar: 'hidden',
@@ -53,13 +53,16 @@ const ratingButtonRecipe = cva({
       },
       false: {
         '&[data-hovered]': {
-          backgroundColor: 'surface.hover',
+          backgroundColor: { base: 'gray.100', _dark: 'surface.hover' },
         },
       },
     },
     borderLeft: {
       true: {
-        borderLeft: '1px solid {colors.border}',
+        borderLeft: {
+          base: '1px solid {colors.gray.300}',
+          _dark: '1px solid {colors.border}',
+        },
       },
     },
   },
@@ -67,7 +70,7 @@ const ratingButtonRecipe = cva({
 
 const labelRecipe = cva({
   base: {
-    color: 'fg.muted',
+    color: { base: 'gray.600', _dark: 'fg.muted' },
     paddingTop: '0.25rem',
   },
 })

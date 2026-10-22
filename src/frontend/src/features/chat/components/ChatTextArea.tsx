@@ -15,7 +15,7 @@ const StyledContainer = styled('div', {
     display: 'flex',
     margin: '0.75rem 0 1.5rem',
     padding: '0.5rem',
-    backgroundColor: 'surface.hover',
+    backgroundColor: { base: 'gray.100', _dark: 'surface.hover' },
     borderRadius: 4,
   },
 })

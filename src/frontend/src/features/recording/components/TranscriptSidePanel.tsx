@@ -191,6 +191,8 @@ export const TranscriptSidePanel = () => {
           height: '250px',
           marginBottom: '1rem',
           marginTop: '-16px',
+          // the illustration has an opaque white background
+          _dark: { borderRadius: 16 },
           '@media (max-height: 900px)': {
             height: 'auto',
             minHeight: 'auto',

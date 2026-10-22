@@ -7,8 +7,12 @@
       // Set the light/dark theme before the CSS loads, to avoid a flash.
       // Same rules as src/stores/theme.ts and src/hooks/useApplyTheme.ts.
       (function () {
+        // blocked site data makes localStorage itself throw: keep 'system'
+        var p = null
         try {
-          var p = localStorage.getItem('app_theme')
+          p = localStorage.getItem('app_theme')
+        } catch (e) {}
+        try {
           var dark =
             p === 'dark' ||
             (p !== 'light' &&

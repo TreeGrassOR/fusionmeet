@@ -37,10 +37,10 @@ const ToolButton = ({
         paddingX: '0.75rem 1.5rem',
         borderRadius: '30px',
         width: 'full',
-        backgroundColor: 'surface.sunken',
+        backgroundColor: { base: 'gray.50', _dark: 'surface.sunken' },
         textAlign: 'start',
         '&[data-hovered]': {
-          backgroundColor: 'accent.subtle',
+          backgroundColor: { base: 'primary.50', _dark: 'accent.subtle' },
           cursor: 'pointer',
         },
       })}

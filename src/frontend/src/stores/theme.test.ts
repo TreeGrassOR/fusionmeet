@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import indexHtml from '../../index.html?raw'
 import {
   parseThemePreference,
@@ -9,7 +9,7 @@ import {
   type ResolvedTheme,
 } from './theme'
 import { STORAGE_KEYS } from '@/utils/storageKeys'
-import { THEME_COLOR } from '@/hooks/useApplyTheme'
+import { isSdkPath, THEME_COLOR } from '@/hooks/useApplyTheme'
 
 const memoryStorage = (initial: Record<string, string> = {}) => {
   const data = new Map(Object.entries(initial))
@@ -105,6 +105,39 @@ describe('theme preference', () => {
   })
 })
 
+describe('when the browser blocks site data', () => {
+  // window.localStorage itself throws a SecurityError (cookie blocking,
+  // sandboxed iframes, strict third-party settings)
+  const blockLocalStorage = () =>
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get: () => {
+        throw new DOMException('Access is denied', 'SecurityError')
+      },
+    })
+
+  afterEach(() => {
+    delete (globalThis as { localStorage?: unknown }).localStorage
+    vi.resetModules()
+  })
+
+  it('reads and writes the default storage without throwing', () => {
+    blockLocalStorage()
+    expect(readThemePreference()).toBe('system')
+    expect(() => writeThemePreference('dark')).not.toThrow()
+  })
+
+  it('still builds the store, which keeps the in-memory choice', async () => {
+    blockLocalStorage()
+    vi.resetModules()
+    const { themeStore } = await import('./theme')
+    expect(themeStore.preference).toBe('system')
+    themeStore.preference = 'dark'
+    await Promise.resolve()
+    expect(themeStore.preference).toBe('dark')
+  })
+})
+
 describe('index.html anti-flash script', () => {
   const stored = [null, 'garbage', ...THEME_PREFERENCE_OPTIONS]
 
@@ -138,10 +171,27 @@ describe('index.html anti-flash script', () => {
     ).toBe('dark')
   })
 
-  it('does nothing when storage is blocked', () => {
+  it.each([
+    ['/sdk', true],
+    ['/sdk/', true],
+    ['/sdk/create-button', true],
+    ['/sdkx', false],
+    ['/sdk-abcd-efg', false],
+    ['/abc-defg-hij', false],
+    ['/', false],
+  ])('detects SDK pages like the app (%s)', (pathname, isSdk) => {
+    expect(isSdkPath(pathname)).toBe(isSdk)
     expect(
-      runInlineScript({ stored: null, systemDark: true, storageThrows: true })
-        .theme
-    ).toBeUndefined()
+      runInlineScript({ stored: 'dark', systemDark: true, pathname }).theme
+    ).toBe(isSdk ? 'light' : 'dark')
   })
+
+  it.each([true, false])(
+    'follows the system when storage is blocked (system dark %s)',
+    (systemDark) => {
+      expect(
+        runInlineScript({ stored: null, systemDark, storageThrows: true }).theme
+      ).toBe(resolveTheme('system', systemDark))
+    }
+  )
 })

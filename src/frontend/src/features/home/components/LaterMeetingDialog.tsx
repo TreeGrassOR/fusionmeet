@@ -42,7 +42,7 @@ export const LaterMeetingDialog = ({
             <div
               className={css({
                 width: '100%',
-                backgroundColor: 'surface.sunken',
+                backgroundColor: { base: 'gray.50', _dark: 'surface.sunken' },
                 borderRadius: '0.75rem',
                 display: 'flex',
                 flexDirection: 'column',
@@ -176,7 +176,10 @@ export const LaterMeetingDialog = ({
             <HStack>
               <div
                 className={css({
-                  backgroundColor: 'accent.subtle',
+                  backgroundColor: {
+                    base: 'primary.200',
+                    _dark: 'accent.subtle',
+                  },
                   borderRadius: '50%',
                   padding: '4px',
                   marginTop: '1rem',

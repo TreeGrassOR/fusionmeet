@@ -19,7 +19,10 @@ const StyledContainer = styled('div', {
   variants: {
     theme: {
       light: {
-        borderTop: '1px solid {colors.border.subtle}',
+        borderTop: {
+          base: '1px solid {colors.gray.200}',
+          _dark: '1px solid {colors.border.subtle}',
+        },
         color: 'fg.muted',
       },
       dark: {

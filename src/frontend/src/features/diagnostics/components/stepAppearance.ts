@@ -23,9 +23,12 @@ export const statusSquareClass: Record<ConnectionTestStepStatus, string> = {
 /**
  * Colour is carried by the square; the label stays near-black except on
  * failure and warning.
+ *
+ * Grey labels use gray.400 in dark: at least 4.5:1 on the card and on the
+ * hovered or expanded header (surface.raised and surface.hover).
  */
 export const statusTextClass: Record<ConnectionTestStepStatus, string> = {
-  pending: css({ color: 'greyscale.500' }),
+  pending: css({ color: { base: 'greyscale.500', _dark: 'gray.400' } }),
   running: css({ color: { base: 'greyscale.700', _dark: 'fg.muted' } }),
   success: css({ color: 'fg' }),
   warning: css({
@@ -36,5 +39,5 @@ export const statusTextClass: Record<ConnectionTestStepStatus, string> = {
     color: { base: 'danger.600', _dark: 'danger.400' },
     fontWeight: 'medium',
   }),
-  skipped: css({ color: 'greyscale.500' }),
+  skipped: css({ color: { base: 'greyscale.500', _dark: 'gray.400' } }),
 }

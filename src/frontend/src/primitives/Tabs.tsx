@@ -64,8 +64,10 @@ const StyledTab = styled(RACTab, {
         borderRadius: 4,
         backgroundColor: 'colorPalette.active',
         transition: 'background 200ms, color 200ms',
-        '&[data-hovered]': {
-          backgroundColor: 'surface.hover',
+        // not on the selected tab: the _dark hover rule is more specific
+        // than [data-selected] and would win over it
+        '&[data-hovered]:not([data-selected])': {
+          backgroundColor: { base: 'gray.100', _dark: 'surface.hover' },
           color: 'box.text',
         },
         '&[data-selected]': {
@@ -116,10 +118,16 @@ const StyledTabList = styled(RACTabList, {
       },
       true: {
         '&[data-orientation=horizontal]': {
-          borderBottom: '1px solid {colors.border}',
+          borderBottom: {
+            base: '1px solid {colors.gray.300}',
+            _dark: '1px solid {colors.border}',
+          },
         },
         '&[data-orientation=vertical]': {
-          borderInlineEnd: '1px solid {colors.border}',
+          borderInlineEnd: {
+            base: '1px solid {colors.gray.300}',
+            _dark: '1px solid {colors.border}',
+          },
         },
       },
     },

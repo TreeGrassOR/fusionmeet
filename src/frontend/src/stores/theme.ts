@@ -23,11 +23,14 @@ export const resolveTheme = (
 ): ResolvedTheme =>
   preference === 'system' ? (systemPrefersDark ? 'dark' : 'light') : preference
 
+// Resolve localStorage inside the try: reading window.localStorage itself
+// throws a SecurityError when the browser blocks site data.
 export const readThemePreference = (
-  storage: Pick<Storage, 'getItem'> | undefined = globalThis.localStorage
+  storage?: Pick<Storage, 'getItem'>
 ): ThemePreference => {
   try {
-    return parseThemePreference(storage?.getItem(STORAGE_KEYS.THEME))
+    const source = storage ?? globalThis.localStorage
+    return parseThemePreference(source?.getItem(STORAGE_KEYS.THEME))
   } catch {
     return DEFAULT_THEME_PREFERENCE
   }
@@ -35,10 +38,11 @@ export const readThemePreference = (
 
 export const writeThemePreference = (
   preference: ThemePreference,
-  storage: Pick<Storage, 'setItem'> | undefined = globalThis.localStorage
+  storage?: Pick<Storage, 'setItem'>
 ) => {
   try {
-    storage?.setItem(STORAGE_KEYS.THEME, preference)
+    const target = storage ?? globalThis.localStorage
+    target?.setItem(STORAGE_KEYS.THEME, preference)
   } catch {
     // private mode or blocked storage: keep the in-memory choice
   }
