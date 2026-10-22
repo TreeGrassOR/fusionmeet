@@ -1,7 +1,7 @@
 {
   "createMeeting": {
     "createButton": "Создать",
-    "joinButton": "Присоединиться через Visio",
+    "joinButton": "Присоединиться к встрече",
     "copyLinkTooltip": "Скопировать ссылку",
     "resetLabel": "Сбросить",
     "participantLimit": "До 150 участников.",

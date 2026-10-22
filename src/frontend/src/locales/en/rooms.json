@@ -233,8 +233,6 @@
         "macos": "System Preferences",
         "windows": "Windows privacy settings"
       },
-      "helpLinkText": "To learn more, see",
-      "helpLinkLabel": "Presentation issue",
       "closeButton": "Dismiss",
       "newTab": "New window"
     }

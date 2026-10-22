@@ -12,6 +12,7 @@ import { LoginButton } from '@/components/LoginButton'
 import { logout } from '@/features/auth/utils/logout'
 import { useMediaQuery } from '@/features/rooms/livekit/hooks/useMediaQuery'
 import { RoomsTab } from './tabs/RoomsTab'
+import { JoinMediaDefaultsFields } from './JoinMediaDefaultsFields'
 
 export type SettingsDialogProps = Pick<DialogProps, 'isOpen' | 'onOpenChange'>
 
@@ -104,6 +105,7 @@ export const SettingsDialog = (props: SettingsDialogProps) => {
           i18n.changeLanguage(lang as string)
         }}
       />
+      <JoinMediaDefaultsFields syncJoinPreview />
     </div>
   )
 

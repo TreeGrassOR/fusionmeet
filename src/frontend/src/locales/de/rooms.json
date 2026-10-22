@@ -233,8 +233,6 @@
         "macos": "Systemeinstellungen",
         "windows": "Windows-Datenschutzeinstellungen"
       },
-      "helpLinkText": "Weitere Informationen findest du unter",
-      "helpLinkLabel": "Bildschirmfreigabeproblem",
       "closeButton": "Schließen",
       "newTab": "Neuer Tab"
     }

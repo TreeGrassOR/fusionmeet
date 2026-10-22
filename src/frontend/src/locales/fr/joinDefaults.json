@@ -1,0 +1,11 @@
+{
+  "heading": "Rejoindre une réunion",
+  "microphone": {
+    "label": "Rejoindre avec le micro coupé",
+    "description": "Votre micro est coupé sur l'écran d'accueil et à l'entrée dans la réunion. Vous pouvez l'activer à tout moment."
+  },
+  "camera": {
+    "label": "Rejoindre avec la caméra coupée",
+    "description": "Votre caméra est coupée sur l'écran d'accueil et à l'entrée dans la réunion. Vous pouvez l'activer à tout moment."
+  }
+}

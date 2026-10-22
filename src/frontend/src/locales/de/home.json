@@ -1,7 +1,7 @@
 {
   "createMeeting": "Meeting erstellen",
   "heading": "Einfache und sichere Videokonferenzen",
-  "intro": "Kommuniziere und arbeite mühelos, ohne deine digitale Souveränität zu gefährden",
+  "intro": "Kommuniziere und arbeite mühelos und behalte die Kontrolle über deine Daten",
   "joinInputError": "Verwende einen Meeting-Link oder -Code. Beispiele:",
   "joinInputExample": "URL oder 10-stelliger Code",
   "joinInputLabel": "Meeting-Link",
@@ -41,13 +41,9 @@
       "labelWithPosition": "Nächste Folie ({{current}} von {{total}})",
       "tooltip": "Nächste Folie"
     },
-    "beta": {
-      "text": "An der Beta teilnehmen",
-      "tooltip": "Formular ausfüllen"
-    },
     "slide1": {
       "title": "Mach Schluss mit kompliziert – probier uns jetzt aus!",
-      "body": "Entdecke eine intuitive und leicht zugängliche Lösung, entwickelt für alle Mitarbeitenden im öffentlichen Dienst, ihre Partner und viele weitere."
+      "body": "Eine intuitive und leicht zugängliche Lösung für Meetings mit Kolleginnen und Kollegen, Partnern und Kunden."
     },
     "slide2": {
       "title": "Gruppenmeetings ohne Einschränkungen",
@@ -55,7 +51,7 @@
     },
     "slide3": {
       "title": "Verwandele deine Meetings mit KI",
-      "body": "Erhalte präzise und verwertbare Transkripte zur Steigerung deiner Produktivität. Beta-Funktion – jetzt testen!"
+      "body": "Präzise Transkripte pro Sprecher helfen dir, keine Entscheidung zu verpassen."
     },
     "carouselLabel": "Einführungs-Diashow",
     "slidePosition": "Folie {{current}} von {{total}}"

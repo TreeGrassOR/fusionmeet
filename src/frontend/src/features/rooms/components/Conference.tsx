@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import {
-  LiveKitRoom,
-  usePersistentUserChoices,
-} from '@livekit/components-react'
+import { LiveKitRoom } from '@livekit/components-react'
 import {
   ConnectionError,
   ConnectionErrorReason,
@@ -27,7 +24,7 @@ import { InviteDialog } from './InviteDialog'
 import { VideoConference } from '../livekit/prefabs/VideoConference'
 import { css } from '@/styled-system/css'
 import { BackgroundProcessorFactory } from '../livekit/components/blur'
-import { LocalUserChoices } from '@/stores/userChoices'
+import { userChoicesStore } from '@/stores/userChoices'
 import {
   captureEvent,
   captureMediaEvent,
@@ -39,7 +36,7 @@ import { useIsMobile } from '@/utils/useIsMobile'
 import { navigateTo } from '@/navigation/navigateTo'
 import { PictureInPictureConference } from '@/features/pip/components/PictureInPictureConference'
 import { notifyAutoMutedOnJoin } from '@/features/notifications/utils'
-import { useSnapshot } from 'valtio'
+import { snapshot, useSnapshot } from 'valtio'
 import { userPreferencesStore } from '@/stores/userPreferences'
 import { userStore } from '@/stores/user'
 import { WatchMediaDeviceErrors } from './WatchMediaDeviceErrors'
@@ -59,9 +56,11 @@ export const Conference = ({
 }) => {
   const { data: apiConfig } = useConfig()
 
-  const { userChoices: userConfig } = usePersistentUserChoices() as {
-    userChoices: LocalUserChoices
-  }
+  // Copy taken once at mount, on purpose not reactive: a device change during
+  // the call must not rebuild roomOptions (new Room() would drop the call).
+  // Read from the store, not from localStorage: the store write of
+  // applyJoinMediaDefaults (Room) reaches localStorage only asynchronously.
+  const [userConfig] = useState(() => snapshot(userChoicesStore))
 
   const { username } = useSnapshot(userStore)
 

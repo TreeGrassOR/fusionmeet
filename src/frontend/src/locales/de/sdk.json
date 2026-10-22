@@ -1,7 +1,7 @@
 {
   "createMeeting": {
     "createButton": "Erstellen",
-    "joinButton": "Mit Visio beitreten",
+    "joinButton": "Dem Meeting beitreten",
     "copyLinkTooltip": "Link kopieren",
     "resetLabel": "Zurücksetzen",
     "participantLimit": "Bis zu 150 Teilnehmende.",

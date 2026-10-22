@@ -2,7 +2,7 @@ import { A, Text } from '@/primitives'
 import { useTranslation } from 'react-i18next'
 import { useConfig } from '@/api/useConfig'
 
-const appTitle = import.meta.env.VITE_APP_TITLE ?? 'LaSuite Meet'
+const appTitle = import.meta.env.VITE_APP_TITLE ?? 'Fusion Meet'
 
 export const MoreLink = () => {
   const { t } = useTranslation('home')

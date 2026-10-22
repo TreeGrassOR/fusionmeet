@@ -16,6 +16,7 @@ import { ApiAccessLevel } from '@/features/rooms/api/ApiRoom'
 import { updatePublishSources } from '@/features/rooms/livekit/hooks/usePublishSourcesManager'
 import { isSubsetOf } from '@/features/rooms/utils/isSubsetOf'
 import { reportError } from '@/features/analytics/telemetry'
+import { BrandLogo } from '@/components/BrandLogo'
 
 type Source = Track.Source
 
@@ -208,14 +209,7 @@ const SettingsPopup = () => {
           borderBottomColor: 'greyscale.250',
         })}
       >
-        <img
-          src="/assets/logo.svg"
-          alt=""
-          className={css({
-            maxHeight: '40px',
-            flexShrink: 0,
-          })}
-        />
+        <BrandLogo className={css({ flexShrink: 0 })} />
         <div className={css({ display: 'flex', flexDirection: 'column' })}>
           <H
             lvl={1}

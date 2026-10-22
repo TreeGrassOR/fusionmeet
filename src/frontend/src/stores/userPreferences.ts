@@ -5,11 +5,16 @@ import { reportError } from '@/features/analytics/telemetry'
 type State = {
   is_idle_disconnect_modal_enabled: boolean
   is_auto_mute_large_room_enabled: boolean
+  // forced off on every room entry, see applyJoinMediaDefaults
+  join_with_microphone_off: boolean
+  join_with_camera_off: boolean
 }
 
 const DEFAULT_STATE = {
   is_idle_disconnect_modal_enabled: true,
   is_auto_mute_large_room_enabled: true,
+  join_with_microphone_off: false,
+  join_with_camera_off: false,
 }
 
 function getUserPreferencesState(): State {

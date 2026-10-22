@@ -10,6 +10,7 @@ import { FeedbackBanner } from '@/components/FeedbackBanner'
 import { Menu } from '@/primitives/Menu'
 import { MenuList } from '@/primitives/MenuList'
 import { LoginButton } from '@/components/LoginButton'
+import { BrandLogo } from '@/components/BrandLogo'
 import { VisualOnlyTooltip } from '@/primitives/VisualOnlyTooltip'
 
 import { useLoginHint } from '@/hooks/useLoginHint'
@@ -22,11 +23,8 @@ import {
 } from '@/features/transcription/hooks/useMyRecordingsMenuItems'
 
 const Logo = () => (
-  <img
-    src="/assets/logo.svg"
-    alt={`${import.meta.env.VITE_APP_TITLE}`}
+  <BrandLogo
     className={`Header-logo ${css({
-      maxHeight: { base: '30px', sm: '40px' },
       marginTop: { base: '10px', sm: '5px' },
     })}`}
   />
@@ -94,9 +92,6 @@ const isLoginButtonHidden = () => {
 export const Header = () => {
   const { t } = useTranslation()
   const isHome = useMatchesRoute('home')
-  const isLegalTerms = useMatchesRoute('legalTerms')
-  const isAccessibility = useMatchesRoute('accessibility')
-  const isTermsOfService = useMatchesRoute('termsOfService')
   const isRoom = useMatchesRoute('room')
   const { user, isLoggedIn } = useUser()
   const myRecordingsMenuItems = useMyRecordingsMenuItems()
@@ -159,24 +154,19 @@ export const Header = () => {
           </header>
           <nav>
             <Stack gap={1} direction="row" align="center">
-              {isLoggedIn === false &&
-                !isHome &&
-                !isLegalTerms &&
-                !isAccessibility &&
-                !isTermsOfService &&
-                !loginButtonDisabledByUrl && (
-                  <>
-                    <div
-                      className={css({
-                        position: 'relative',
-                        display: { base: 'none', xsm: 'block' },
-                      })}
-                    >
-                      <LoginButton proConnectHint={false} />
-                      <LoginHint />
-                    </div>
-                  </>
-                )}
+              {isLoggedIn === false && !isHome && !loginButtonDisabledByUrl && (
+                <>
+                  <div
+                    className={css({
+                      position: 'relative',
+                      display: { base: 'none', xsm: 'block' },
+                    })}
+                  >
+                    <LoginButton />
+                    <LoginHint />
+                  </div>
+                </>
+              )}
               {!!user && (
                 <Menu>
                   <Button size="sm" variant="secondaryText">

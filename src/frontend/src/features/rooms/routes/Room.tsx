@@ -18,6 +18,7 @@ import { LogLevel, setLogLevel } from 'livekit-client'
 import { useWatchDeviceAvailability } from '@/features/rooms/hooks/useWatchDeviceAvailability'
 import { useWatchDeviceReleased } from '@/features/rooms/hooks/useWatchDeviceReleased'
 import { useRoomPageTitle } from '@/features/rooms/livekit/hooks/useRoomPageTitle'
+import { applyJoinMediaDefaults } from '@/features/rooms/utils/applyJoinMediaDefaults'
 
 const BaseRoom = ({ children }: { children: ReactNode }) => {
   return (
@@ -32,6 +33,11 @@ const BaseRoom = ({ children }: { children: ReactNode }) => {
 const Room = () => {
   const { isLoggedIn } = useUser()
   const [hasSubmittedEntry, setHasSubmittedEntry] = useState(false)
+  // Once per room entry, before <Join> or <Conference> first read the choices
+  useState(() => {
+    applyJoinMediaDefaults()
+    return true
+  })
 
   const { roomId } = useParams()
   const [location, setLocation] = useLocation()

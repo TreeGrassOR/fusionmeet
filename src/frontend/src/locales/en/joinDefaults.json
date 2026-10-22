@@ -1,0 +1,11 @@
+{
+  "heading": "Joining a meeting",
+  "microphone": {
+    "label": "Join with my microphone off",
+    "description": "Your microphone is off on the join screen and when you enter the meeting. You can turn it on at any time."
+  },
+  "camera": {
+    "label": "Join with my camera off",
+    "description": "Your camera is off on the join screen and when you enter the meeting. You can turn it on at any time."
+  }
+}
