@@ -10,6 +10,7 @@ import { MutedMicIndicator } from './MutedMicIndicator'
 import { ParticipantName } from './ParticipantName'
 import { RaisedHandMetadataWrapper } from './RaisedHandMetadataWrapper'
 import { MutedForMeIndicator } from '@/features/participantAudio/components/MutedForMeIndicator'
+import { ScreenShareMutedIndicator } from '@/features/participantAudio/components/ScreenShareMutedIndicator'
 
 export const ParticipantMetadata = ({
   displayedName,
@@ -27,6 +28,9 @@ export const ParticipantMetadata = ({
       <HStack gap={0.25}>
         {!isScreenShare && <MutedMicIndicator participant={participant} />}
         {!isScreenShare && <MutedForMeIndicator participant={participant} />}
+        {isScreenShare && (
+          <ScreenShareMutedIndicator participant={participant} />
+        )}
         <RaisedHandMetadataWrapper
           participant={participant}
           enabled={!isScreenShare}

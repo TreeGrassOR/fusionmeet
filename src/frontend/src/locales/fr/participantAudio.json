@@ -4,6 +4,23 @@
     "label": "Couper le son pour moi"
   },
   "mutedForMeIndicator": "Son coupé pour vous",
+  "screenShare": {
+    "mute": {
+      "ariaLabel": "Couper le son du partage d’écran de {{name}} pour vous uniquement",
+      "label": "Couper le son du partage"
+    },
+    "mutedIndicator": "Son du partage d’écran coupé pour vous",
+    "mutedWithParticipant": "Tout le son de ce participant est coupé pour vous.",
+    "settingsFor": "Son du partage d’écran de {{name}}",
+    "tileButton": "Volume du partage d’écran de {{name}}",
+    "unmute": {
+      "ariaLabel": "Réactiver le son du partage d’écran de {{name}} pour vous",
+      "label": "Réactiver le son du partage"
+    },
+    "volume": {
+      "label": "Volume du partage d’écran"
+    }
+  },
   "settingsFor": "Réglages du son de {{name}}",
   "tileButton": "Volume de {{name}}",
   "unmuteForMe": {

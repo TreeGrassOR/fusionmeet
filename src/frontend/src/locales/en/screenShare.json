@@ -1,0 +1,7 @@
+{
+  "audioNotShared": {
+    "description": "Your browser cannot remove the other participants' voices from the screen audio, so they would hear themselves again. To present a video with sound, pick a browser tab and turn on “Also share tab audio”.",
+    "title": "Screen audio is not shared",
+    "updateBrowser": "Or update your browser: Chrome and Edge can remove the meeting sound since version 141 (Windows 11, macOS 14.2 and later)."
+  }
+}

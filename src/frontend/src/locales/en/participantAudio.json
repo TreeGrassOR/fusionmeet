@@ -4,6 +4,23 @@
     "label": "Mute for me"
   },
   "mutedForMeIndicator": "Muted for you",
+  "screenShare": {
+    "mute": {
+      "ariaLabel": "Mute the screen share audio of {{name}} for you only",
+      "label": "Mute screen share"
+    },
+    "mutedIndicator": "Screen share audio muted for you",
+    "mutedWithParticipant": "All audio of this participant is muted for you.",
+    "settingsFor": "Screen share audio of {{name}}",
+    "tileButton": "Screen share volume of {{name}}",
+    "unmute": {
+      "ariaLabel": "Unmute the screen share audio of {{name}} for you",
+      "label": "Unmute screen share"
+    },
+    "volume": {
+      "label": "Screen share volume"
+    }
+  },
   "settingsFor": "Sound settings for {{name}}",
   "tileButton": "Volume of {{name}}",
   "unmuteForMe": {

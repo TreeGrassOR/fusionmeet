@@ -8,6 +8,7 @@ import { FocusButton } from './FocusButton'
 import { EffectsButton } from './EffectsButton'
 import { MuteButton } from './MuteButton'
 import { ParticipantVolumeButton } from '@/features/participantAudio/components/ParticipantVolumeButton'
+import { ScreenShareVolumeButton } from '@/features/participantAudio/components/ScreenShareVolumeButton'
 
 const MOUSE_IDLE_TIME = 3000
 
@@ -141,6 +142,12 @@ export const ParticipantTileFocus = ({
                 />
               )}
             </>
+          )}
+          {isScreenShare && !isLocal && (
+            <ScreenShareVolumeButton
+              participant={participant}
+              onOpenChange={setIsVolumeOpen}
+            />
           )}
         </HStack>
       </div>

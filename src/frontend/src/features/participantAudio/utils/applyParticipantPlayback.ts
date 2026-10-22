@@ -1,13 +1,30 @@
 import { type RemoteParticipant, Track } from 'livekit-client'
-import type { ParticipantPlayback } from '@/stores/participantAudio'
+import type {
+  ParticipantPlayback,
+  SourcePlayback,
+} from '@/stores/participantAudio'
 
 /**
- * Settings apply to every audio source of the participant.
+ * Audio sources of a participant the settings apply to, each with its own
+ * playback (livekit-client keeps one volume per source).
  */
 export const PARTICIPANT_AUDIO_SOURCES = [
   Track.Source.Microphone,
   Track.Source.ScreenShareAudio,
 ] as const
+
+type ParticipantAudioSource = (typeof PARTICIPANT_AUDIO_SOURCES)[number]
+
+const PLAYBACK_KEY: Record<ParticipantAudioSource, keyof ParticipantPlayback> =
+  {
+    [Track.Source.Microphone]: 'microphone',
+    [Track.Source.ScreenShareAudio]: 'screenShareAudio',
+  }
+
+const getSourcePlayback = (
+  playback: ParticipantPlayback,
+  source: ParticipantAudioSource
+): SourcePlayback => playback[PLAYBACK_KEY[source]]
 
 /**
  * Volume used while a participant is silenced. livekit-client 2.21 only
@@ -16,7 +33,9 @@ export const PARTICIPANT_AUDIO_SOURCES = [
  */
 export const SILENT_VOLUME = 0.0001
 
-const isParticipantAudioSource = (source: Track.Source) =>
+const isParticipantAudioSource = (
+  source: Track.Source
+): source is ParticipantAudioSource =>
   (PARTICIPANT_AUDIO_SOURCES as readonly Track.Source[]).includes(source)
 
 /**
@@ -28,10 +47,11 @@ const isParticipantAudioSource = (source: Track.Source) =>
  */
 export const applyParticipantPlayback = (
   participant: RemoteParticipant,
-  { volume, isMuted }: ParticipantPlayback
+  playback: ParticipantPlayback
 ) => {
-  const targetVolume = isMuted ? SILENT_VOLUME : volume
   for (const source of PARTICIPANT_AUDIO_SOURCES) {
+    const { volume, isMuted } = getSourcePlayback(playback, source)
+    const targetVolume = isMuted ? SILENT_VOLUME : volume
     try {
       participant.setVolume(targetVolume, source)
     } catch {
@@ -44,12 +64,9 @@ export const applyParticipantPlayback = (
   // the previous publication of the same source is still listed, and only the
   // first one would be returned, leaving the new one enabled.
   participant.audioTrackPublications.forEach((publication) => {
-    if (
-      isParticipantAudioSource(publication.source) &&
-      publication.isDesired &&
-      publication.isEnabled === isMuted
-    ) {
-      publication.setEnabled(!isMuted)
-    }
+    const { source } = publication
+    if (!isParticipantAudioSource(source) || !publication.isDesired) return
+    const { isMuted } = getSourcePlayback(playback, source)
+    if (publication.isEnabled === isMuted) publication.setEnabled(!isMuted)
   })
 }

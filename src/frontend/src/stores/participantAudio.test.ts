@@ -8,6 +8,7 @@ import {
   pruneParticipants,
   resolveParticipantPlayback,
   serializeParticipantAudioState,
+  type ParticipantAudioSettings,
   type StoredParticipantAudioSettings,
 } from './participantAudio'
 import { STORAGE_KEYS } from '@/utils/storageKeys'
@@ -38,6 +39,31 @@ class MemoryStorage implements Storage {
 
 // valtio notifies subscribers asynchronously
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+const SCREEN_SHARE_DEFAULTS = { screenShareVolume: 1, screenShareMuted: false }
+
+/** Stored entry with the screen share fields at their defaults. */
+const stored = (
+  volume: number,
+  mutedForMe: boolean,
+  updatedAt: number,
+  extra: Partial<StoredParticipantAudioSettings> = {}
+): StoredParticipantAudioSettings => ({
+  volume,
+  mutedForMe,
+  ...SCREEN_SHARE_DEFAULTS,
+  updatedAt,
+  ...extra,
+})
+
+const settings = (
+  patch: Partial<ParticipantAudioSettings> = {}
+): ParticipantAudioSettings => ({
+  volume: 1,
+  mutedForMe: false,
+  ...SCREEN_SHARE_DEFAULTS,
+  ...patch,
+})
 
 const loadStore = async () => {
   vi.resetModules()
@@ -76,22 +102,66 @@ describe('getMaxParticipantVolume', () => {
 })
 
 describe('resolveParticipantPlayback', () => {
-  it('silences participants muted for me or at volume 0', () => {
+  it('silences both sources of participants muted for me', () => {
     expect(
-      resolveParticipantPlayback({ volume: 1.5, mutedForMe: true }, 2)
-    ).toEqual({ volume: 1.5, isMuted: true })
-    expect(
-      resolveParticipantPlayback({ volume: 0, mutedForMe: false }, 2)
-    ).toEqual({ volume: 0, isMuted: true })
+      resolveParticipantPlayback(
+        settings({ volume: 1.5, mutedForMe: true, screenShareVolume: 0.5 }),
+        2
+      )
+    ).toEqual({
+      microphone: { volume: 1.5, isMuted: true },
+      screenShareAudio: { volume: 0.5, isMuted: true },
+    })
   })
 
-  it('caps the volume to what the browser supports', () => {
+  it('silences a source at volume 0 only', () => {
+    expect(resolveParticipantPlayback(settings({ volume: 0 }), 2)).toEqual({
+      microphone: { volume: 0, isMuted: true },
+      screenShareAudio: { volume: 1, isMuted: false },
+    })
     expect(
-      resolveParticipantPlayback({ volume: 1.5, mutedForMe: false }, 1)
-    ).toEqual({ volume: 1, isMuted: false })
+      resolveParticipantPlayback(settings({ screenShareVolume: 0 }), 2)
+    ).toEqual({
+      microphone: { volume: 1, isMuted: false },
+      screenShareAudio: { volume: 0, isMuted: true },
+    })
+  })
+
+  it('mutes the screen share audio and keeps the microphone audible', () => {
     expect(
-      resolveParticipantPlayback({ volume: 1.5, mutedForMe: false }, 2)
-    ).toEqual({ volume: 1.5, isMuted: false })
+      resolveParticipantPlayback(
+        settings({
+          volume: 0.8,
+          screenShareVolume: 1.2,
+          screenShareMuted: true,
+        }),
+        2
+      )
+    ).toEqual({
+      microphone: { volume: 0.8, isMuted: false },
+      screenShareAudio: { volume: 1.2, isMuted: true },
+    })
+  })
+
+  it('caps both volumes to what the browser supports', () => {
+    expect(
+      resolveParticipantPlayback(
+        settings({ volume: 1.5, screenShareVolume: 1.8 }),
+        1
+      )
+    ).toEqual({
+      microphone: { volume: 1, isMuted: false },
+      screenShareAudio: { volume: 1, isMuted: false },
+    })
+    expect(
+      resolveParticipantPlayback(
+        settings({ volume: 1.5, screenShareVolume: 1.8 }),
+        2
+      )
+    ).toEqual({
+      microphone: { volume: 1.5, isMuted: false },
+      screenShareAudio: { volume: 1.8, isMuted: false },
+    })
   })
 })
 
@@ -125,9 +195,45 @@ describe('parseParticipantAudioState', () => {
     })
     expect(parseParticipantAudioState(raw)).toEqual({
       participants: {
-        alice: { volume: 1.5, mutedForMe: false, updatedAt: 10 },
-        bob: { volume: 2, mutedForMe: false, updatedAt: 0 },
-        dave: { volume: 1, mutedForMe: true, updatedAt: 0 },
+        alice: stored(1.5, false, 10),
+        bob: stored(2, false, 0),
+        dave: stored(1, true, 0),
+      },
+    })
+  })
+
+  it('loads version 1 entries with the screen share defaults', () => {
+    const state = parseParticipantAudioState(
+      '{"version":1,"participants":{"a":{"volume":0.5,"mutedForMe":false,"updatedAt":1}}}'
+    )
+    expect(state).toEqual({
+      participants: {
+        a: {
+          volume: 0.5,
+          mutedForMe: false,
+          screenShareVolume: 1,
+          screenShareMuted: false,
+          updatedAt: 1,
+        },
+      },
+    })
+  })
+
+  it('sanitizes the screen share fields', () => {
+    const raw = JSON.stringify({
+      version: 2,
+      participants: {
+        loud: { screenShareVolume: 9, updatedAt: 1 },
+        quiet: { screenShareVolume: -3, updatedAt: 2 },
+        invalid: { screenShareVolume: '0.5', screenShareMuted: 'yes' },
+        muted: { screenShareMuted: true, updatedAt: 3 },
+      },
+    })
+    expect(parseParticipantAudioState(raw)).toEqual({
+      participants: {
+        loud: stored(1, false, 1, { screenShareVolume: 2 }),
+        quiet: stored(1, false, 2, { screenShareVolume: 0 }),
+        muted: stored(1, false, 3, { screenShareMuted: true }),
       },
     })
   })
@@ -143,7 +249,7 @@ describe('parseParticipantAudioState', () => {
   it('keeps only the most recently updated entries', () => {
     const participants: Record<string, StoredParticipantAudioSettings> = {}
     for (let i = 0; i < MAX_STORED_PARTICIPANTS + 5; i++) {
-      participants[`p${i}`] = { volume: 0.5, mutedForMe: false, updatedAt: i }
+      participants[`p${i}`] = stored(0.5, false, i)
     }
     const state = parseParticipantAudioState(JSON.stringify({ participants }))
     const identities = Object.keys(state.participants)
@@ -157,20 +263,22 @@ describe('parseParticipantAudioState', () => {
   it('round-trips with serializeParticipantAudioState', () => {
     const state = {
       participants: {
-        alice: { volume: 0.25, mutedForMe: true, updatedAt: 42 },
+        alice: stored(0.25, true, 42),
+        bob: stored(1, false, 43, {
+          screenShareVolume: 0.4,
+          screenShareMuted: true,
+        }),
       },
     }
     const serialized = serializeParticipantAudioState(state)
-    expect(JSON.parse(serialized)).toEqual({ version: 1, ...state })
+    expect(JSON.parse(serialized)).toEqual({ version: 2, ...state })
     expect(parseParticipantAudioState(serialized)).toEqual(state)
   })
 })
 
 describe('pruneParticipants', () => {
   it('returns the same object when under the limit', () => {
-    const participants = {
-      a: { volume: 0.5, mutedForMe: false, updatedAt: 1 },
-    }
+    const participants = { a: stored(0.5, false, 1) }
     expect(pruneParticipants(participants, 1)).toBe(participants)
   })
 
@@ -179,9 +287,9 @@ describe('pruneParticipants', () => {
       Object.keys(
         pruneParticipants(
           {
-            old: { volume: 0.5, mutedForMe: false, updatedAt: 1 },
-            recent: { volume: 0.5, mutedForMe: false, updatedAt: 3 },
-            middle: { volume: 0.5, mutedForMe: false, updatedAt: 2 },
+            old: stored(0.5, false, 1),
+            recent: stored(0.5, false, 3),
+            middle: stored(0.5, false, 2),
           },
           2
         )
@@ -193,13 +301,24 @@ describe('pruneParticipants', () => {
 describe('getParticipantAudioSettings', () => {
   it('returns defaults for unknown identities', () => {
     const state = parseParticipantAudioState(null)
-    expect(getParticipantAudioSettings(state, 'unknown')).toEqual({
-      volume: 1,
-      mutedForMe: false,
-    })
-    expect(getParticipantAudioSettings(state, 'toString')).toEqual({
-      volume: 1,
-      mutedForMe: false,
+    expect(getParticipantAudioSettings(state, 'unknown')).toEqual(settings())
+    expect(getParticipantAudioSettings(state, 'toString')).toEqual(settings())
+  })
+
+  it('returns every stored field, without updatedAt', () => {
+    const state = {
+      participants: {
+        alice: stored(0.5, true, 7, {
+          screenShareVolume: 1.5,
+          screenShareMuted: true,
+        }),
+      },
+    }
+    expect(getParticipantAudioSettings(state, 'alice')).toEqual({
+      volume: 0.5,
+      mutedForMe: true,
+      screenShareVolume: 1.5,
+      screenShareMuted: true,
     })
   })
 })
@@ -231,10 +350,10 @@ describe('participantAudioStore', () => {
     const store = await loadStore()
     expect(
       store.getParticipantAudioSettings(store.participantAudioStore, 'alice')
-    ).toEqual({ volume: 1.8, mutedForMe: false })
+    ).toEqual(settings({ volume: 1.8 }))
     expect(
       store.getParticipantAudioSettings(store.participantAudioStore, 'bob')
-    ).toEqual({ volume: 1, mutedForMe: true })
+    ).toEqual(settings({ mutedForMe: true }))
   })
 
   it('persists volume and mute changes per identity', async () => {
@@ -247,12 +366,70 @@ describe('participantAudioStore', () => {
     await flush()
 
     expect(JSON.parse(storage.getItem(KEY)!)).toEqual({
-      version: 1,
+      version: 2,
       participants: {
-        alice: { volume: 1.5, mutedForMe: false, updatedAt: 1_000 },
-        bob: { volume: 1, mutedForMe: true, updatedAt: 1_000 },
+        alice: stored(1.5, false, 1_000),
+        bob: stored(1, true, 1_000),
       },
     })
+  })
+
+  it('persists the screen share settings apart from the voice', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(2_000)
+    const store = await loadStore()
+
+    store.setParticipantScreenShareVolume('alice', 0.4)
+    store.toggleParticipantScreenShareMuted('bob')
+    await flush()
+
+    expect(JSON.parse(storage.getItem(KEY)!)).toEqual({
+      version: 2,
+      participants: {
+        alice: stored(1, false, 2_000, { screenShareVolume: 0.4 }),
+        bob: stored(1, false, 2_000, { screenShareMuted: true }),
+      },
+    })
+
+    // survives a reload
+    const reloaded = await loadStore()
+    expect(
+      reloaded.getParticipantAudioSettings(
+        reloaded.participantAudioStore,
+        'alice'
+      )
+    ).toEqual(settings({ screenShareVolume: 0.4 }))
+    expect(
+      reloaded.getParticipantAudioSettings(
+        reloaded.participantAudioStore,
+        'bob'
+      )
+    ).toEqual(settings({ screenShareMuted: true }))
+  })
+
+  it('keeps the other fields when one of them changes', async () => {
+    const store = await loadStore()
+    store.setParticipantVolume('alice', 0.5)
+    store.setParticipantScreenShareVolume('alice', 1.5)
+    store.setParticipantScreenShareMuted('alice', true)
+    store.setParticipantMutedForMe('alice', true)
+    expect(
+      store.getParticipantAudioSettings(store.participantAudioStore, 'alice')
+    ).toEqual({
+      volume: 0.5,
+      mutedForMe: true,
+      screenShareVolume: 1.5,
+      screenShareMuted: true,
+    })
+  })
+
+  it('does not touch the entry when nothing changes', async () => {
+    const store = await loadStore()
+    store.setParticipantScreenShareVolume('alice', 0.4)
+    const before = store.participantAudioStore.participants.alice
+    store.setParticipantScreenShareVolume('alice', 0.4)
+    store.setParticipantScreenShareMuted('alice', false)
+    expect(store.participantAudioStore.participants.alice).toBe(before)
   })
 
   it('clamps stored volumes to [0, 200 %]', async () => {
@@ -261,6 +438,14 @@ describe('participantAudioStore', () => {
     store.setParticipantVolume('bob', -1)
     expect(store.participantAudioStore.participants.alice.volume).toBe(2)
     expect(store.participantAudioStore.participants.bob.volume).toBe(0)
+
+    store.setParticipantScreenShareVolume('carol', 3)
+    store.setParticipantScreenShareVolume('dave', -1)
+    store.setParticipantScreenShareVolume('eve', 0.333)
+    const { participants } = store.participantAudioStore
+    expect(participants.carol.screenShareVolume).toBe(2)
+    expect(participants.dave.screenShareVolume).toBe(0)
+    expect(participants.eve.screenShareVolume).toBe(0.33)
   })
 
   it('removes entries back to the defaults', async () => {
@@ -280,6 +465,24 @@ describe('participantAudioStore', () => {
     expect(JSON.parse(storage.getItem(KEY)!).participants).toEqual({})
   })
 
+  it('removes an entry when the screen share settings go back to the defaults', async () => {
+    const store = await loadStore()
+    store.setParticipantScreenShareVolume('alice', 0.4)
+    store.toggleParticipantScreenShareMuted('alice')
+    await flush()
+    expect(JSON.parse(storage.getItem(KEY)!).participants.alice).toMatchObject({
+      screenShareVolume: 0.4,
+      screenShareMuted: true,
+    })
+
+    store.toggleParticipantScreenShareMuted('alice')
+    expect(store.participantAudioStore.participants.alice).toBeDefined()
+    store.setParticipantScreenShareVolume('alice', 1)
+    await flush()
+    expect(store.participantAudioStore.participants).toEqual({})
+    expect(JSON.parse(storage.getItem(KEY)!).participants).toEqual({})
+  })
+
   it('ignores invalid identities', async () => {
     const store = await loadStore()
     store.setParticipantVolume('', 0.5)
@@ -290,7 +493,7 @@ describe('participantAudioStore', () => {
   it('keeps the newest entries when the limit is reached', async () => {
     const participants: Record<string, StoredParticipantAudioSettings> = {}
     for (let i = 0; i < MAX_STORED_PARTICIPANTS; i++) {
-      participants[`p${i}`] = { volume: 0.5, mutedForMe: false, updatedAt: i }
+      participants[`p${i}`] = stored(0.5, false, i)
     }
     storage.setItem(KEY, JSON.stringify({ version: 1, participants }))
     const store = await loadStore()
@@ -316,7 +519,7 @@ describe('participantAudioStore', () => {
     await flush()
     expect(
       store.getParticipantAudioSettings(store.participantAudioStore, 'alice')
-    ).toEqual({ volume: 0.3, mutedForMe: false })
+    ).toEqual(settings({ volume: 0.3 }))
 
     vi.stubGlobal('localStorage', undefined)
     const storeWithoutStorage = await loadStore()

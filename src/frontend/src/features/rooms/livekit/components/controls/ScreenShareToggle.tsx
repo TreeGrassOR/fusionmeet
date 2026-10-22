@@ -1,20 +1,17 @@
 import { Div, ToggleButton } from '@/primitives'
 import { RiArrowUpLine, RiCloseFill, RiRectangleLine } from '@remixicon/react'
 import { useTranslation } from 'react-i18next'
-import {
-  useTrackToggle,
-  type UseTrackToggleProps,
-} from '@livekit/components-react'
+import { type UseTrackToggleProps } from '@livekit/components-react'
 import { Track } from 'livekit-client'
-import React from 'react'
 import { type ButtonRecipeProps } from '@/primitives/buttonRecipe'
 import { ToggleButtonProps } from '@/primitives/ToggleButton'
 import { TrackSource } from '@livekit/protocol'
 import { useCanPublishTrack } from '@/features/rooms/livekit/hooks/useCanPublishTrack'
+import { useScreenShareToggle } from '@/features/rooms/livekit/hooks/useScreenShareToggle'
 
 type Props = Omit<
   UseTrackToggleProps<Track.Source.ScreenShare>,
-  'source' | 'captureOptions'
+  'source' | 'captureOptions' | 'publishOptions' | 'initialState'
 > &
   Pick<NonNullable<ButtonRecipeProps>, 'variant'> &
   ToggleButtonProps
@@ -22,13 +19,14 @@ type Props = Omit<
 export const ScreenShareToggle = ({
   variant = 'primaryDark',
   onPress,
+  onChange,
+  onDeviceError,
   ...props
 }: Props) => {
   const { t } = useTranslation('rooms', { keyPrefix: 'controls.screenShare' })
-  const { buttonProps, enabled } = useTrackToggle({
-    ...props,
-    source: Track.Source.ScreenShare,
-    captureOptions: { audio: true, selfBrowserSurface: 'include' },
+  const { enabled, isPending, toggle } = useScreenShareToggle({
+    onChange,
+    onDeviceError,
   })
 
   const tooltipLabel = enabled ? 'stop' : 'start'
@@ -40,15 +38,13 @@ export const ScreenShareToggle = ({
   return (
     <ToggleButton
       isSelected={enabled}
-      isDisabled={!canShareScreen}
+      isDisabled={!canShareScreen || isPending}
       square
       variant={variant}
       aria-label={t(tooltipLabel)}
       tooltip={t(tooltipLabel)}
       onPress={(e) => {
-        buttonProps.onClick?.(
-          e as unknown as React.MouseEvent<HTMLButtonElement, MouseEvent>
-        )
+        void toggle()
         onPress?.(e)
       }}
       data-attr={`controls-screenshare-${tooltipLabel}`}
