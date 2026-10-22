@@ -19,7 +19,7 @@ export const ChatMessageBody = React.memo(
         className={css({
           whiteSpace: 'pre-wrap',
           '& .lk-chat-link': {
-            color: 'blue',
+            color: { base: 'blue', _dark: 'accent.text' },
             textDecoration: 'underline',
           },
         })}

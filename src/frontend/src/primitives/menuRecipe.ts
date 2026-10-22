@@ -23,11 +23,11 @@ export const menuRecipe = sva({
         },
       },
       '&[data-focused]': {
-        color: 'primary.text',
+        color: 'white',
         backgroundColor: 'primaryDark.100',
       },
       '&[data-hovered]': {
-        color: 'primary.text',
+        color: 'white',
         backgroundColor: 'primaryDark.100',
       },
       '&[data-focus-visible]': {
@@ -42,10 +42,12 @@ export const menuRecipe = sva({
       light: {
         item: {
           '&[data-focused]': {
-            backgroundColor: 'primary.800',
+            color: 'fg.onAccent',
+            backgroundColor: 'accent',
           },
           '&[data-hovered]': {
-            backgroundColor: 'primary.800',
+            color: 'fg.onAccent',
+            backgroundColor: 'accent',
           },
         },
       },

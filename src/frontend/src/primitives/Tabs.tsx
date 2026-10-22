@@ -65,12 +65,12 @@ const StyledTab = styled(RACTab, {
         backgroundColor: 'colorPalette.active',
         transition: 'background 200ms, color 200ms',
         '&[data-hovered]': {
-          backgroundColor: 'gray.100',
+          backgroundColor: 'surface.hover',
           color: 'box.text',
         },
         '&[data-selected]': {
-          backgroundColor: 'primary.800',
-          color: 'white',
+          backgroundColor: 'accent',
+          color: 'fg.onAccent',
         },
       },
     },
@@ -116,12 +116,10 @@ const StyledTabList = styled(RACTabList, {
       },
       true: {
         '&[data-orientation=horizontal]': {
-          borderBottom: '1px solid',
-          borderColor: 'gray.300',
+          borderBottom: '1px solid {colors.border}',
         },
         '&[data-orientation=vertical]': {
-          borderInlineEnd: '1px solid',
-          borderColor: 'gray.300',
+          borderInlineEnd: '1px solid {colors.border}',
         },
       },
     },

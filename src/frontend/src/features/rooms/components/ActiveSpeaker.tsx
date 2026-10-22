@@ -6,7 +6,8 @@ const StyledContainer = styled('div', {
     width: '24px',
     height: '24px',
     boxSizing: 'border-box',
-    backgroundColor: 'primary',
+    // raw palette: same colour in both themes (also used in the call chrome)
+    backgroundColor: 'blue.700',
     borderRadius: '100%',
     display: 'flex',
     alignItems: 'center',
@@ -55,7 +56,7 @@ const StyledChild = styled('div', {
     },
     pushToTalk: {
       true: {
-        backgroundColor: 'primary',
+        backgroundColor: 'blue.700',
         width: '6px',
         height: '6px',
       },

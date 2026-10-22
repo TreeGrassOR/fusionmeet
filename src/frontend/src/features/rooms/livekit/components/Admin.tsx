@@ -82,7 +82,7 @@ export const Admin = () => {
             border: 'none',
             height: '1px',
             width: '100%',
-            background: 'greyscale.250',
+            background: 'border',
           })}
         />
         <H
@@ -169,7 +169,7 @@ export const Admin = () => {
             border: 'none',
             height: '1px',
             width: '100%',
-            background: 'greyscale.250',
+            background: 'border',
           })}
         />
         <H

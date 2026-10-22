@@ -50,9 +50,11 @@ const box = cva({
         backgroundColor: 'box.bg',
         color: 'control.text',
       },
+      // in-call menus and popovers: dark in both themes
       dark: {
         backgroundColor: 'primaryDark.50',
-        borderColord: 'primaryDark.50',
+        borderColor: 'primaryDark.50',
+        color: 'white',
       },
     },
     size: {

@@ -19,7 +19,7 @@ export const TextArea = styled(RACTextArea, {
     placeholderStyle: {
       strong: {
         _placeholder: {
-          color: 'black',
+          color: 'fg',
         },
       },
     },

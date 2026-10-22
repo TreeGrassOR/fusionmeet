@@ -8,4 +8,6 @@ export const STORAGE_KEYS = {
   ACCESSIBILITY: 'app_accessibility_settings',
   RECORDING_ENCODING: 'app_recording_encoding',
   PARTICIPANT_AUDIO: 'app_participant_audio_settings',
+  // plain string (not JSON): the inline script in index.html reads it too
+  THEME: 'app_theme',
 } as const

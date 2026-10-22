@@ -5,7 +5,7 @@ import { styled, HStack, VStack } from '@/styled-system/jsx'
 const Container = styled('div', {
   base: {
     border: '1px solid',
-    borderColor: 'greyscale.250',
+    borderColor: 'border',
     borderRadius: '8px',
     margin: '0 .625rem 0.9375rem',
   },
@@ -25,7 +25,7 @@ const Header = styled('button', {
     fontSize: '1rem',
     transition: 'background 200ms',
     borderTopRadius: '7px', // container radius (8) minus its 1px border
-    _hover: { backgroundColor: 'greyscale.50' },
+    _hover: { backgroundColor: 'surface.hover' },
   },
   variants: {
     isOpen: { false: { borderRadius: '7px' } },
@@ -41,8 +41,7 @@ const Chevron = styled(RiArrowUpSLine, {
 
 const List = styled(VStack, {
   base: {
-    borderTop: '1px solid',
-    borderTopColor: 'greyscale.250',
+    borderTop: '1px solid {colors.border}',
     alignItems: 'start',
     minHeight: 0,
     flexGrow: 1,

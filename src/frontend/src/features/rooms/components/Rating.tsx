@@ -10,7 +10,7 @@ import { captureEvent } from '@/features/analytics/telemetry'
 const Card = styled('div', {
   base: {
     border: '1px solid',
-    borderColor: 'gray.300',
+    borderColor: 'border',
     padding: '1rem',
     marginTop: '1.5rem',
     borderRadius: '0.25rem',
@@ -25,7 +25,7 @@ const Bar = styled('div', {
   base: {
     display: 'flex',
     border: '2px solid',
-    borderColor: 'gray.300',
+    borderColor: 'border',
     borderRadius: '8px',
     overflowY: 'hidden',
     scrollbar: 'hidden',
@@ -34,8 +34,8 @@ const Bar = styled('div', {
 
 const ratingButtonRecipe = cva({
   base: {
-    backgroundColor: 'white',
-    color: 'initial',
+    backgroundColor: 'surface.raised',
+    color: 'fg',
     border: 'none',
     borderRadius: 0,
     padding: { base: '0.5rem 0.25rem', xsm: '0.5rem 0.85rem' },
@@ -48,19 +48,18 @@ const ratingButtonRecipe = cva({
   variants: {
     selected: {
       true: {
-        backgroundColor: 'primary.800',
-        color: 'white',
+        backgroundColor: 'accent',
+        color: 'fg.onAccent',
       },
       false: {
         '&[data-hovered]': {
-          backgroundColor: 'gray.100',
+          backgroundColor: 'surface.hover',
         },
       },
     },
     borderLeft: {
       true: {
-        borderLeft: '1px solid',
-        borderColor: 'gray.300',
+        borderLeft: '1px solid {colors.border}',
       },
     },
   },
@@ -68,7 +67,7 @@ const ratingButtonRecipe = cva({
 
 const labelRecipe = cva({
   base: {
-    color: 'gray.600',
+    color: 'fg.muted',
     paddingTop: '0.25rem',
   },
 })

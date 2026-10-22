@@ -27,7 +27,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
         className={css({
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: 'white',
+          backgroundColor: 'surface.page',
           color: 'default.text',
           flex: '1',
         })}

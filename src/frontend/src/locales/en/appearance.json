@@ -1,0 +1,12 @@
+{
+  "heading": "Appearance",
+  "theme": {
+    "description": "Saved in this browser.",
+    "label": "Theme",
+    "options": {
+      "dark": "Dark",
+      "light": "Light",
+      "system": "Same as the system"
+    }
+  }
+}

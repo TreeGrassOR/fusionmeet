@@ -42,7 +42,7 @@ export const LaterMeetingDialog = ({
             <div
               className={css({
                 width: '100%',
-                backgroundColor: 'gray.50',
+                backgroundColor: 'surface.sunken',
                 borderRadius: '0.75rem',
                 display: 'flex',
                 flexDirection: 'column',
@@ -176,7 +176,7 @@ export const LaterMeetingDialog = ({
             <HStack>
               <div
                 className={css({
-                  backgroundColor: 'primary.200',
+                  backgroundColor: 'accent.subtle',
                   borderRadius: '50%',
                   padding: '4px',
                   marginTop: '1rem',
@@ -185,7 +185,7 @@ export const LaterMeetingDialog = ({
                 <RiSpam2Fill
                   size={22}
                   className={css({
-                    fill: 'primary.500',
+                    fill: { base: 'primary.500', _dark: 'accent' },
                   })}
                   aria-hidden="true"
                 />

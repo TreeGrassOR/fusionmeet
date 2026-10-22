@@ -30,7 +30,7 @@ const StyledCheckbox = styled(RACCheckbox, {
       transition: 'all 200ms',
     },
     '& svg': {
-      stroke: 'primary.text',
+      stroke: 'fg.onAccent',
       width: '0.875rem',
       height: '0.875rem',
       flexShrink: 0,

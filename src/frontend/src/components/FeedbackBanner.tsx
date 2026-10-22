@@ -14,8 +14,8 @@ export const FeedbackBanner = () => {
     <div
       className={css({
         width: '100%',
-        backgroundColor: 'primary.50',
-        color: 'primary.600',
+        backgroundColor: 'accent.subtle',
+        color: { base: 'primary.600', _dark: 'accent.text' },
         display: { base: 'none', sm: 'flex' },
         justifyContent: 'center',
         padding: '0.5rem 0',

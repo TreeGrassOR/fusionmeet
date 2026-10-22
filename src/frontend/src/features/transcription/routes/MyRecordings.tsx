@@ -61,8 +61,7 @@ const rowClassName = css({
   justifyContent: 'space-between',
   gap: '0.5rem 1rem',
   paddingY: '0.75rem',
-  borderTop: '1px solid',
-  borderColor: 'greyscale.100',
+  borderTop: '1px solid {colors.border.subtle}',
 })
 
 const StatusText = ({
@@ -258,7 +257,7 @@ const MeetingCard = ({ meeting }: { meeting: Meeting }) => {
       aria-labelledby={headingId}
       className={css({
         border: '1px solid',
-        borderColor: 'greyscale.200',
+        borderColor: 'border',
         borderRadius: '8px',
         paddingX: '1rem',
         paddingTop: '1rem',

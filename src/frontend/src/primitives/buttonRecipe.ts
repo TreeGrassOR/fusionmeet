@@ -52,45 +52,47 @@ export const buttonRecipe = cva({
       },
     },
     variant: {
+      // light variants follow the theme (semantic tokens), *Dark/*Circle
+      // variants are the in-call chrome, dark in both themes
       primary: {
-        backgroundColor: 'primary.800',
-        color: 'white',
+        backgroundColor: 'accent',
+        color: 'fg.onAccent',
         fontWeight: 'medium !important',
         '&[data-hovered]': {
-          backgroundColor: 'primary.action',
+          backgroundColor: 'accent.hover',
         },
         '&[data-pressed]': {
-          backgroundColor: 'primary.action',
+          backgroundColor: 'accent.hover',
         },
         '&[data-disabled]': {
-          backgroundColor: 'greyscale.100',
-          color: 'greyscale.400',
+          backgroundColor: 'surface.hover',
+          color: 'fg.subtle',
         },
       },
       secondary: {
-        backgroundColor: 'white',
-        color: 'primary.800',
+        backgroundColor: 'surface.raised',
+        color: 'accent.text',
         fontWeight: 'medium !important',
-        borderColor: 'primary.800',
+        borderColor: 'accent',
         '&[data-hovered]': {
-          backgroundColor: 'greyscale.100',
+          backgroundColor: 'surface.hover',
         },
         '&[data-pressed]': {
-          backgroundColor: 'greyscale.100',
+          backgroundColor: 'surface.hover',
         },
       },
       secondaryText: {
         backgroundColor: 'transparent',
         fontWeight: 'medium !important',
-        color: 'primary.800',
+        color: 'accent.text',
         '&[data-hovered]': {
-          backgroundColor: 'greyscale.100',
+          backgroundColor: 'surface.hover',
         },
         '&[data-pressed]': {
-          backgroundColor: 'greyscale.100',
+          backgroundColor: 'surface.hover',
         },
         '&[data-disabled]': {
-          color: 'greyscale.400',
+          color: 'fg.subtle',
         },
       },
       whiteCircle: {
@@ -109,49 +111,53 @@ export const buttonRecipe = cva({
       bigSquare: {
         width: '56px',
         height: '56px',
-        borderColor: 'greyscale.200',
+        borderColor: 'border.subtle',
         borderRadius: '4px',
-        backgroundColor: 'greyscale.50',
+        backgroundColor: 'surface.sunken',
         padding: '0',
         flexShrink: 0,
         '&[data-hovered]': {
-          backgroundColor: 'greyscale.100',
+          backgroundColor: 'surface.hover',
         },
         transition: 'box-shadow 0.2s ease-in-out',
         '&[data-selected]': {
-          boxShadow:
-            '0 0 0 3px token(colors.primary.600) inset, 0 0 0 5px white inset',
+          boxShadow: {
+            base: '0 0 0 3px token(colors.primary.600) inset, 0 0 0 5px token(colors.surface.raised) inset',
+            _dark:
+              '0 0 0 3px token(colors.accent) inset, 0 0 0 5px token(colors.surface.raised) inset',
+          },
         },
         '&[data-disabled]': {
-          backgroundColor: 'greyscale.100',
-          color: 'greyscale.400',
+          backgroundColor: 'surface.hover',
+          color: 'fg.subtle',
           opacity: '0.7',
         },
       },
       tertiary: {
-        backgroundColor: 'primary.100',
+        backgroundColor: 'accent.subtle',
         fontWeight: 'medium !important',
-        color: 'primary.800',
+        color: 'accent.text',
         '&[data-hovered]': {
-          backgroundColor: 'primary.300',
+          backgroundColor: 'accent.subtle-hover',
         },
         '&[data-pressed]': {
-          backgroundColor: 'primary.300',
+          backgroundColor: 'accent.subtle-hover',
         },
         '&[data-disabled]': {
           backgroundColor: 'transparent',
+          // readable on both themes
           color: 'primary.400',
         },
       },
       tertiaryText: {
         backgroundColor: 'transparent',
         fontWeight: 'medium !important',
-        color: 'primary.900',
+        color: { base: 'primary.900', _dark: 'accent.text' },
         '&[data-hovered]': {
-          backgroundColor: 'primary.300',
+          backgroundColor: 'accent.subtle-hover',
         },
         '&[data-pressed]': {
-          backgroundColor: 'primary.300',
+          backgroundColor: 'accent.subtle-hover',
         },
       },
       primaryDark: {
@@ -218,34 +224,34 @@ export const buttonRecipe = cva({
       quaternaryText: {
         backgroundColor: 'transparent',
         fontWeight: 'medium !important',
-        color: 'greyscale.600',
+        color: 'fg.muted',
         '&[data-hovered]': {
-          backgroundColor: 'greyscale.100',
-          color: 'greyscale.700',
+          backgroundColor: 'surface.hover',
+          color: { base: 'greyscale.700', _dark: 'fg' },
         },
         '&[data-pressed]': {
-          backgroundColor: 'greyscale.100',
-          color: 'greyscale.700',
+          backgroundColor: 'surface.hover',
+          color: { base: 'greyscale.700', _dark: 'fg' },
         },
         '&[data-disabled]': {
           backgroundColor: 'transparent',
-          color: 'greyscale.300',
+          color: { base: 'greyscale.300', _dark: 'fg.subtle' },
         },
       },
       greyscale: {
         backgroundColor: 'transparent',
-        color: 'greyscale.400',
+        color: 'fg.subtle',
         '&[data-hovered]': {
-          color: 'greyscale.800',
+          color: { base: 'greyscale.800', _dark: 'fg' },
         },
         '&[data-pressed]': {
-          color: 'greyscale.800',
+          color: { base: 'greyscale.800', _dark: 'fg' },
         },
         '&[data-selected]': {
-          color: 'greyscale.800',
+          color: { base: 'greyscale.800', _dark: 'fg' },
         },
         '&[data-disabled]': {
-          color: 'greyscale.200',
+          color: { base: 'greyscale.200', _dark: 'greyscale.700' },
         },
       },
       danger: {
@@ -301,7 +307,7 @@ export const buttonRecipe = cva({
         color: 'success.subtle-text',
         backgroundColor: 'success.subtle',
         '&[data-hovered]': {
-          backgroundColor: 'success.200',
+          backgroundColor: { base: 'success.200', _dark: 'success.900' },
         },
         '&[data-pressed]': {
           backgroundColor: 'success.subtle!',
@@ -310,7 +316,7 @@ export const buttonRecipe = cva({
       text: {
         color: 'primary',
         '&[data-hovered]': {
-          background: 'gray.100 !important',
+          background: 'surface.hover !important',
           color: 'primary !important',
         },
       },
@@ -339,7 +345,7 @@ export const buttonRecipe = cva({
           borderColor: 'currentcolor',
         },
         '&[data-disabled]': {
-          color: 'gray.300',
+          color: { base: 'gray.300', _dark: 'fg.subtle' },
         },
       },
     },

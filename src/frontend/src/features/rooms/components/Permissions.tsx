@@ -196,6 +196,8 @@ export const Permissions = () => {
               width: '100%',
               minHeight: '290px',
               maxWidth: '290px',
+              // the illustration has an opaque white background
+              _dark: { borderRadius: 16 },
             })}
           />
           <div

@@ -46,7 +46,7 @@ const isSupported = BackgroundProcessorFactory.isSupported()
 
 const Information = styled('div', {
   base: {
-    backgroundColor: 'orange.50',
+    backgroundColor: { base: 'orange.50', _dark: 'warning.subtle' },
     borderRadius: '4px',
     padding: '0.75rem 0.75rem',
     alignItems: 'start',

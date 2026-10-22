@@ -30,7 +30,7 @@ export const text = cva({
       },
       subTitle: {
         fontSize: '1rem',
-        color: 'greyscale.600',
+        color: 'fg.muted',
       },
       bodyXsBold: {
         textStyle: 'body',

@@ -27,7 +27,7 @@ const TextContainer = styled('div', {
   base: {
     display: 'flex',
     padding: '0.75rem',
-    backgroundColor: 'greyscale.50',
+    backgroundColor: 'surface.sunken',
     borderRadius: 4,
     marginBottom: '0.75rem',
   },
