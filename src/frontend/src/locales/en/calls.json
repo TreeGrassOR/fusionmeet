@@ -92,7 +92,8 @@
     "error": "Could not load the call.",
     "notFound": "This call does not exist or you cannot access it.",
     "retry": "Retry",
-    "opened": "Call “{{title}}” opened"
+    "opened": "Call “{{title}}” opened",
+    "notAttended": "You did not take part in this call"
   },
   "chat": {
     "label": "Chat messages",

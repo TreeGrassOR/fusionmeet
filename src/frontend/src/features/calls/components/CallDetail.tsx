@@ -368,6 +368,7 @@ export const CallDetail = ({
                 </span>
               )}
               <span>{when}</span>
+              {!call.participated && <span>{t('notAttended')}</span>}
             </p>
           </div>
         </div>

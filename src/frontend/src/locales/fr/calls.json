@@ -94,7 +94,8 @@
     "error": "Impossible de charger l'appel.",
     "notFound": "Cet appel n'existe pas ou vous n'y avez pas accès.",
     "retry": "Réessayer",
-    "opened": "Appel « {{title}} » ouvert"
+    "opened": "Appel « {{title}} » ouvert",
+    "notAttended": "Vous n’avez pas participé à cet appel"
   },
   "chat": {
     "label": "Messages du chat",
