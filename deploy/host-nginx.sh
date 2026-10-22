@@ -291,27 +291,60 @@ EOF
 
 # hn_before_up HOSTS...: HTTP forwarding of every name, and HTTPS for the names
 # that already have a certificate (so they keep working while the new ones get
-# theirs).
+# theirs). Called right before "up", not before the image build: until "up"
+# replaces them, the running containers still use the names of the previous
+# run, which the new configuration may no longer forward.
 hn_before_up() {
-  hn_check_names "$@"
   hn_apply "$@"
 }
 
-# hn_after_up HOSTS...: waits for Caddy's certificates, then enables HTTPS.
+# hn_wait_certs SECONDS HOSTS...: waits up to SECONDS until every name of HOSTS
+# has its certificate; fails if one is still missing then.
+hn_wait_certs() {
+  local limit=$1 waited=0
+  shift
+  until hn_have_certs "$@"; do
+    ((waited < limit)) || return 1
+    sleep 5
+    waited=$((waited + 5))
+  done
+}
+
+# hn_after_up "MAIN..." HOSTS...: waits for Caddy's certificates, then enables
+# HTTPS for every name of HOSTS that has one. The MAIN names (space separated:
+# the site, Keycloak, LiveKit) get HN_CERT_TIMEOUT seconds; one still without a
+# certificate stops up.sh, after HTTPS of the other names is enabled. The other
+# names (MEET_REDIRECT_HOSTS) only get a warning, and at most 30 s more: Caddy
+# asks for all the certificates at once.
 hn_after_up() {
-  local waited=0 limit=${HN_CERT_TIMEOUT:-300}
-  if ! hn_have_certs "$@"; then
-    note "жду сертификаты Let's Encrypt для $* (до $limit с) ..."
-    while ! hn_have_certs "$@"; do
-      if ((waited >= limit)); then
-        die "Caddy не получил сертификаты за $limit с. Проверьте, что порт 80 проброшен
-на роутере на этот сервер, и журнал: sudo docker compose -f $FM_COMPOSE_FILE logs caddy
-После исправления запустите up.sh снова."
-      fi
-      sleep 5
-      waited=$((waited + 5))
-    done
+  local main=() host waiting=() missing=() late=() limit=${HN_CERT_TIMEOUT:-300} grace upto
+  read -r -a main <<<"$1"
+  shift
+  grace=$((limit < 30 ? limit : 30))
+  for host in "$@"; do hn_have_cert "$host" || waiting+=("$host"); done
+  if ((${#waiting[@]} > 0)); then
+    upto=$limit
+    if hn_have_certs "${main[@]}"; then upto=$grace; fi
+    note "жду сертификаты Let's Encrypt для ${waiting[*]} (до $upto с) ..."
+    if hn_wait_certs "$limit" "${main[@]}"; then
+      hn_wait_certs "$grace" "$@" || true
+    fi
   fi
   hn_apply "$@"
   hn_install_reload_timer
+  for host in "$@"; do
+    hn_have_cert "$host" && continue
+    if [[ " ${main[*]} " == *" $host "* ]]; then missing+=("$host"); else late+=("$host"); fi
+  done
+  if ((${#late[@]} > 0)); then
+    warn "нет сертификата для ${late[*]} (MEET_REDIRECT_HOSTS): пока только HTTP. Проверьте A-записи и журнал caddy, затем запустите up.sh снова"
+  fi
+  ((${#missing[@]} == 0)) ||
+    die "Caddy не получил за $limit с сертификаты Let's Encrypt для ${missing[*]}.
+Для имён, у которых сертификат есть, HTTPS уже включён. Проверьте:
+  - A-записи этих имён ведут на PUBLIC_IP из $FM_ENV_FILE (getent hosts <имя>;
+    только что добавленную запись Let's Encrypt может не видеть до 30 минут);
+  - порт 80 проброшен на роутере на этот сервер;
+  - журнал: sudo docker compose -f $FM_COMPOSE_FILE logs caddy | grep -i -E 'error|acme'
+Затем запустите up.sh снова."
 }
