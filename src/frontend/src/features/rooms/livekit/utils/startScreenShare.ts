@@ -1,4 +1,5 @@
 import { Track, type LocalParticipant, type LocalTrack } from 'livekit-client'
+import { TrackSource } from '@livekit/protocol'
 import {
   getScreenShareCaptureOptions,
   isRestrictOwnAudioSupported,
@@ -18,6 +19,21 @@ export type ScreenShareAudioDropReason = 'unsupported' | 'notApplied'
 let isStarting = false
 
 /**
+ * livekit-client's own publish check (LocalParticipant
+ * .hasPermissionsToPublish): an empty source list allows every source.
+ * Publishing a source that is not allowed fails with a 403.
+ */
+const canPublishScreenShareAudio = (participant: LocalParticipant) => {
+  const permissions = participant.permissions
+  if (!permissions?.canPublish) return false
+  const { canPublishSources } = permissions
+  return (
+    canPublishSources.length === 0 ||
+    canPublishSources.includes(TrackSource.SCREEN_SHARE_AUDIO)
+  )
+}
+
+/**
  * Captures and publishes the screen share. Unlike setScreenShareEnabled(),
  * which captures and publishes in one go, the audio is checked before it is
  * published and dropped when it may carry the conference: the other
@@ -27,7 +43,8 @@ let isStarting = false
  * screen sources, like the browser's own "Stop sharing" button does.
  *
  * Resolves with the reason when the audio was dropped, null otherwise
- * (published, none captured, or a capture already in progress).
+ * (published, none captured or not allowed, or a capture already in
+ * progress).
  */
 export const startScreenShare = async (
   participant: LocalParticipant
@@ -38,6 +55,10 @@ export const startScreenShare = async (
   try {
     const tracks = await participant.createScreenTracks({
       ...getScreenShareCaptureOptions(),
+      // without the permission, the browser does not even offer the audio
+      ...(canPublishScreenShareAudio(participant)
+        ? {}
+        : { audio: false, systemAudio: 'exclude' }),
     })
     const video = tracks.find(
       (track) => track.source === Track.Source.ScreenShare
@@ -48,7 +69,12 @@ export const startScreenShare = async (
 
     let dropReason: ScreenShareAudioDropReason | null = null
     let toPublish = tracks
-    if (
+    if (audio && !canPublishScreenShareAudio(participant)) {
+      // the permission changed while the picker was open: its publish would
+      // fail, and take the video down with it
+      audio.stop()
+      toPublish = tracks.filter((track) => track !== audio)
+    } else if (
       audio &&
       mayCarryConferenceAudio(video?.mediaStreamTrack, audio.mediaStreamTrack)
     ) {
