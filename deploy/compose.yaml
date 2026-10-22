@@ -130,6 +130,8 @@ x-backend-env: &backend-env
   # Call history (backend app "calls"): sessions, participants and chat messages,
   # fed by the second LiveKit webhook (livekit service below)
   CALLS_HISTORY_ENABLED: "True"
+  CALLS_TRANSCRIPTS_VISIBLE_TO_PARTICIPANTS: ${CALLS_TRANSCRIPTS_VISIBLE_TO_PARTICIPANTS:-true}
+  CALLS_VISIBLE_TO_ROOM_ADMINS: ${CALLS_VISIBLE_TO_ROOM_ADMINS:-true}
   # Email: Django's console backend unless SMTP_HOST is set in deploy/.env
   DJANGO_EMAIL_BACKEND: django.core.mail.backends.${EMAIL_BACKEND_KIND:-console}.EmailBackend
   DJANGO_EMAIL_HOST: ${SMTP_HOST:-}
