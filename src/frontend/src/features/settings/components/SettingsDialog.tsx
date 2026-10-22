@@ -58,6 +58,17 @@ const tabPanelStyle = css({
   paddingBottom: '1rem',
 })
 
+// The plain dialog does not scroll by itself and the page behind it is locked:
+// keep its content within the viewport so phones can reach the last switch.
+// The padding keeps focus rings inside the scroll box, the margin cancels it.
+const plainContentStyle = css({
+  maxHeight: 'calc(100vh - 8rem)',
+  overflowY: 'auto',
+  padding: '0.25rem',
+  margin: '-0.25rem',
+  '@supports (height: 100dvh)': { maxHeight: 'calc(100dvh - 8rem)' },
+})
+
 export const SettingsDialog = (props: SettingsDialogProps) => {
   const { t, i18n } = useTranslation('settings')
   const { user, isLoggedIn } = useUser()
@@ -76,7 +87,7 @@ export const SettingsDialog = (props: SettingsDialogProps) => {
       className={css({
         display: 'flex',
         flexDirection: 'column',
-        minWidth: '360px',
+        minWidth: { base: 0, sm: '360px' },
       })}
     >
       <H lvl={2}>{t('account.heading')}</H>
@@ -118,7 +129,7 @@ export const SettingsDialog = (props: SettingsDialogProps) => {
   if (!isLoggedIn) {
     return (
       <Dialog title={t('dialog.heading')} {...props} role="dialog" type="flex">
-        {generalContent}
+        <div className={plainContentStyle}>{generalContent}</div>
       </Dialog>
     )
   }

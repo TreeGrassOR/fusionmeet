@@ -26,7 +26,8 @@
 | `bin/check-i18n-ru` | проверка, что ключи `ru` совпадают с `en` |
 | `docs/features/gigaam-transcription.md` | описание расшифровки по участникам |
 | `src/frontend/src/components/BrandLogo.tsx`, `src/frontend/public/assets/fusion-meet-email.png` | логотип Fusion Meet: знак (inline SVG, `currentColor`) и название из `VITE_APP_TITLE`; широкий логотип для писем |
-| `src/frontend/src/features/rooms/utils/joinMediaDefaults.ts`, `applyJoinMediaDefaults.ts`, `src/frontend/src/features/settings/components/JoinMediaDefaultsFields.tsx`, `src/frontend/src/locales/{en,ru,fr}/joinDefaults.json`, `src/frontend/src/stores/userPreferences.test.ts` | «Входить с выключенным микрофоном / камерой» (настройка браузера) |
+| `src/frontend/src/features/rooms/utils/joinMediaDefaults.ts`, `applyJoinMediaDefaults.ts`, `joinWarmupKinds.ts`, `src/frontend/src/features/settings/components/JoinMediaDefaultsFields.tsx`, `src/frontend/src/locales/{en,ru,fr}/joinDefaults.json`, `src/frontend/src/stores/userPreferences.test.ts`, `src/frontend/src/features/rooms/livekit/hooks/useJoinTracks.test.ts` | «Входить с выключенным микрофоном / камерой» (настройка браузера); какие устройства экран входа запрашивает заранее |
+| `src/frontend/src/locales/betaWording.test.ts` | проверка, что в переводах не осталось пометок «(beta)» / «(бета)» |
 | `deploy/` (кроме `deploy/paas/`) | docker compose для одного сервера с GPU, скрипты установки |
 | `UPSTREAM.md` | этот файл |
 
@@ -47,7 +48,7 @@
 | `src/frontend/src/features/rooms/livekit/prefabs/VideoConference.tsx` | провайдер расшифровки, синхронизатор громкости, переводимый `ConnectionStateToast`, `ChatPersistence` рядом с `ChatProvider` |
 | `src/frontend/src/features/pip/components/PipView.tsx` | переводимый `ConnectionStateToast` |
 | `src/frontend/src/features/rooms/livekit/components/controls/StartMediaButton.tsx` | перевод «Start Audio» и «Start Video» |
-| `src/frontend/src/locales/{en,fr,de,es,nl}/rooms.json` | ключи `controls.startMedia.*` и `connectionState.*` для двух строк выше; удалены `error.screenShare.helpLinkText` и `helpLinkLabel`; `chat.disclaimer`: сообщения сохраняются в истории звонка |
+| `src/frontend/src/locales/{en,fr,de,es,nl}/rooms.json` | ключи `controls.startMedia.*` и `connectionState.*` для двух строк выше; удалены `error.screenShare.helpLinkText` и `helpLinkLabel`; `chat.disclaimer`: сообщения сохраняются в истории звонка; без пометки «(beta)» в `transcript.*.body` и `screenRecording.*.body` |
 | `src/frontend/src/features/rooms/components/Conference.tsx` | `webAudioMix` там, где браузер поддерживает усиление выше 100 %; `userConfig` — снимок `userChoicesStore` при монтировании вместо `usePersistentUserChoices` (иначе при «Создать встречу» читалось старое состояние из localStorage) |
 | `src/frontend/src/features/participants/components/menu/ParticipantMenu.tsx`, `ParticipantMenuButton.tsx` | ползунок громкости и «Выключить звук для меня» |
 | `src/frontend/src/features/participantTile/components/ParticipantMetadata.tsx`, `participantTileFocus/ParticipantTileFocus.tsx` | кнопка громкости на плитке и значок «звук выключен для вас»; на плитке трансляции со звуком — громкость трансляции и значок «звук трансляции выключен для вас» |
@@ -67,7 +68,8 @@
 | `src/frontend/public/favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `android-chrome-192x192.png`, `android-chrome-512x512.png`, `icon.png`, `public/assets/logo.svg` | значок и логотип Fusion Meet (те же имена и размеры; в `logo.svg` текст переведён в контуры) |
 | `src/frontend/src/stores/userPreferences.ts` | `join_with_microphone_off`, `join_with_camera_off` (по умолчанию `false`) |
 | `src/frontend/src/features/rooms/routes/Room.tsx` | `applyJoinMediaDefaults()` один раз на вход в комнату (ленивый `useState`) |
-| `src/frontend/src/features/settings/components/SettingsDialog.tsx`, `tabs/GeneralTab.tsx` | переключатели «Вход во встречу» (`JoinMediaDefaultsFields`) |
+| `src/frontend/src/features/settings/components/SettingsDialog.tsx`, `tabs/GeneralTab.tsx` | переключатели «Вход во встречу» (`JoinMediaDefaultsFields`); в окне без входа содержимое прокручивается, а `min-width: 360px` действует только с ширины `sm`, иначе на телефоне последние переключатели оказывались за краем экрана |
+| `src/frontend/src/features/rooms/livekit/hooks/useJoinTracks.ts` | прогрев разрешений на экране входа запрашивает только включённые устройства, на которые браузер ещё не дал разрешения (`resolveJoinWarmupKinds`): при входе с выключенной камерой она не включается даже на миг; пропущенное устройство сразу готово, его дорожка создаётся, когда его включат |
 | `src/summary/summary/core/locales/__init__.py` | регистрация `ru` |
 | `src/frontend/panda.config.ts`, `index.html`, `src/App.tsx`, `src/styles/index.css`, `src/styles/livekit.css`, `src/utils/storageKeys.tsx`, `src/features/pip/hooks/usePictureInPicture.ts` | тёмная тема: условие `_dark` по `[data-theme=dark]` на `<html>`, семантические токены `surface.*`, `fg.*`, `border.*`, `accent.*` и значения `_dark` у `default`, `box`, `control`, `primary`, `danger`, `success`, `warning`, `focusRing`; фон и цвет `body`; скрипт в `<head>`, который ставит тему до загрузки CSS, и `<meta name="theme-color">`; переменные LiveKit: серые в светлой теме как в upstream, в тёмной на токенах (`--lk-fg` раньше ссылалась на несуществующую переменную, акценты звонка закреплены); скрипт в `<head>` читает `localStorage` в своём `try`, так что при заблокированном хранилище работает «Как в системе»; тема в окне «Картинка в картинке»; ключ `app_theme` |
 | `src/frontend/src/features/settings/components/SettingsDialog.tsx`, `tabs/GeneralTab.tsx` | блок «Оформление» после выбора языка |

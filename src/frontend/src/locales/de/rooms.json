@@ -504,7 +504,7 @@
     "linkAriaLabel": "Dokumentation zur Transkription öffnen – öffnet in neuem Tab",
     "notAdminOrOwner": {
       "heading": "Zugriff eingeschränkt",
-      "body": "Aus Sicherheitsgründen kann nur die*der Ersteller:in bzw. Admin des Meetings eine Transkription (Beta) starten.",
+      "body": "Aus Sicherheitsgründen kann nur die*der Ersteller:in bzw. Admin des Meetings eine Transkription starten.",
       "linkMore": "Dokumentation öffnen",
       "linkAriaLabel": "Dokumentation zum Transkriptionszugang öffnen – öffnet in neuem Tab",
       "dividerLabel": "ODER",
@@ -520,7 +520,7 @@
     },
     "notLoggedIn": {
       "heading": "Zum Transkribieren anmelden",
-      "body": "In diesem Meeting kann jede angemeldete Person eine Transkription (Beta) starten.",
+      "body": "In diesem Meeting kann jede angemeldete Person eine Transkription starten.",
       "linkMore": "Dokumentation öffnen",
       "linkAriaLabel": "Dokumentation zum Transkriptionszugang öffnen – öffnet in neuem Tab",
       "dividerLabel": "ODER",
@@ -575,7 +575,7 @@
     },
     "notAdminOrOwner": {
       "heading": "Zugriff eingeschränkt",
-      "body": "Aus Sicherheitsgründen kann nur die*der Ersteller:in bzw. Admin des Meetings eine Videoaufnahme (Beta) starten.",
+      "body": "Aus Sicherheitsgründen kann nur die*der Ersteller:in bzw. Admin des Meetings eine Videoaufnahme starten.",
       "linkMore": "Dokumentation öffnen",
       "linkAriaLabel": "Dokumentation zum Aufzeichnungszugang öffnen – öffnet in neuem Tab",
       "dividerLabel": "ODER",
@@ -591,7 +591,7 @@
     },
     "notLoggedIn": {
       "heading": "Zum Aufnehmen anmelden",
-      "body": "In diesem Meeting kann jede angemeldete Person eine Videoaufnahme (Beta) starten.",
+      "body": "In diesem Meeting kann jede angemeldete Person eine Videoaufnahme starten.",
       "linkMore": "Dokumentation öffnen",
       "linkAriaLabel": "Dokumentation zum Aufzeichnungszugang öffnen – öffnet in neuem Tab",
       "dividerLabel": "ODER",
