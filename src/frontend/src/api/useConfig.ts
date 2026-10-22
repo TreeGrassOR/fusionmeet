@@ -56,6 +56,9 @@ export interface ApiConfig {
   transcription?: {
     enabled: boolean
   }
+  calls?: {
+    enabled: boolean
+  }
   diagnostics: {
     connection_test_enabled?: boolean
   }

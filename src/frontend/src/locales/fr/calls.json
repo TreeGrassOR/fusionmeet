@@ -1,0 +1,152 @@
+{
+  "title": {
+    "namesAndMore": "{{names}} et {{count}} autres",
+    "twoNames": "{{first}} et {{second}}",
+    "onDate": "Appel du {{date}}"
+  },
+  "rail": {
+    "label": "Sections",
+    "home": "{{appTitle}}, accueil",
+    "calls": "Appels",
+    "recordings": "Enregistrements"
+  },
+  "list": {
+    "title": "Appels",
+    "newCall": "Nouvel appel",
+    "search": "Rechercher",
+    "searchLabel": "Rechercher dans les appels, les participants et les messages",
+    "clearSearch": "Effacer la recherche",
+    "label": "Appels",
+    "loading": "Chargement des appels…",
+    "error": "Impossible de charger les appels.",
+    "retry": "Réessayer",
+    "empty": "Vos appels apparaîtront ici, avec leur chat, leur transcription et leurs enregistrements.",
+    "noResults": "Aucun résultat."
+  },
+  "item": {
+    "you": "Vous",
+    "someone": "Participant",
+    "active": "en cours",
+    "yesterday": "hier",
+    "participants_one": "{{count}} participant",
+    "participants_many": "{{count}} participants",
+    "participants_other": "{{count}} participants",
+    "unread_one": "{{count}} message non lu",
+    "unread_many": "{{count}} messages non lus",
+    "unread_other": "{{count}} messages non lus",
+    "hasTranscript": "avec transcription",
+    "hasRecording": "avec enregistrement",
+    "current": "ouvert"
+  },
+  "home": {
+    "title": "{{appTitle}} : chats et appels vidéo",
+    "newCall": "Nouvel appel",
+    "newChat": "Nouveau chat",
+    "soon": "Bientôt",
+    "join": "Rejoindre un appel",
+    "schedule": "Planifier dans un agenda",
+    "scheduleShort": "Planifier",
+    "createError": "Impossible de créer l'appel. Veuillez réessayer.",
+    "invite": {
+      "title": "Lien d'invitation à {{appTitle}}",
+      "body": "Envoyez-le à la personne avec qui vous voulez échanger",
+      "short": "Lien d'invitation",
+      "copy": "Copier le lien",
+      "copied": "Lien copié",
+      "error": "Impossible de créer le lien. Veuillez réessayer."
+    }
+  },
+  "schedule": {
+    "heading": "Planifier un appel",
+    "name": "Titre",
+    "defaultTitle": "Appel sur {{appTitle}}",
+    "date": "Date",
+    "time": "Heure",
+    "duration": "Durée",
+    "submit": "Créer l'appel",
+    "cancel": "Annuler",
+    "error": "Impossible de créer l'appel. Veuillez réessayer.",
+    "doneHeading": "Appel planifié",
+    "when": "{{day}}, {{start}}–{{end}}",
+    "description": "Lien de l'appel : {{url}}",
+    "copy": "Copier le lien",
+    "copied": "Copié",
+    "titleNotSaved": "L'appel a été créé, mais son titre n'a pas été enregistré dans l'historique.",
+    "ics": "Télécharger le .ics",
+    "google": "Google Agenda",
+    "done": "Terminé"
+  },
+  "detail": {
+    "back": "Retour aux appels",
+    "active": "En cours",
+    "when": "{{day}}, {{start}}–{{end}} · {{duration}}",
+    "since": "{{day}}, commencé à {{start}}",
+    "participantsLabel": "Participants : {{names}}",
+    "rejoin": "Revenir dans l'appel",
+    "tabsLabel": "Sections de l'appel",
+    "tabs": {
+      "chat": "Chat",
+      "transcript": "Transcription",
+      "recordings": "Enregistrements",
+      "participants": "Participants"
+    },
+    "error": "Impossible de charger l'appel.",
+    "notFound": "Cet appel n'existe pas ou vous n'y avez pas accès.",
+    "retry": "Réessayer"
+  },
+  "chat": {
+    "label": "Messages du chat",
+    "you": "Vous",
+    "empty": "Personne n'a écrit dans le chat de cet appel.",
+    "emptyActive": "Personne n'a encore écrit dans le chat. Les nouveaux messages apparaîtront ici.",
+    "error": "Impossible de charger les messages.",
+    "retry": "Réessayer"
+  },
+  "transcript": {
+    "none": "Cet appel n'a pas de transcription.",
+    "choose": "Transcriptions de l'appel",
+    "item": "Transcription {{time}}",
+    "pending": "La transcription est en préparation",
+    "pendingHint": "Elle apparaîtra ici une fois la transcription arrêtée.",
+    "failed": "La transcription n'a pas pu être enregistrée.",
+    "notViewable": "La transcription est accessible à la personne qui l'a lancée et aux organisateurs de l'appel.",
+    "label": "Phrases de la transcription",
+    "search": "Rechercher dans la transcription",
+    "clearSearch": "Effacer la recherche",
+    "matches": "Résultats : {{count}}",
+    "noMatches": "Aucun résultat",
+    "download": "Télécharger le .txt",
+    "fileHeading": "Transcription de l'appel « {{title}} »",
+    "empty": "La transcription ne contient aucune phrase.",
+    "error": "Impossible de charger la transcription.",
+    "retry": "Réessayer"
+  },
+  "recordings": {
+    "none": "Rien n'a été enregistré pendant cet appel.",
+    "video": "Enregistrement vidéo",
+    "audio": "Enregistrement audio",
+    "startedAt": "Début à {{time}}",
+    "open": "Ouvrir",
+    "openVideo": "Ouvrir l'enregistrement vidéo",
+    "openAudio": "Ouvrir l'enregistrement audio",
+    "status": {
+      "ready": "prêt",
+      "inProgress": "enregistrement en cours",
+      "processing": "sauvegarde en cours",
+      "failed": "échec de l'enregistrement"
+    }
+  },
+  "participants": {
+    "none": "Aucun participant.",
+    "you": "vous",
+    "guest": "invité",
+    "noName": "Sans nom",
+    "range": "{{start}}–{{end}}",
+    "present": "dans l'appel depuis {{start}}",
+    "since": "depuis {{start}}"
+  },
+  "login": {
+    "heading": "Connexion requise",
+    "body": "Connectez-vous pour voir l'historique de vos appels."
+  }
+}

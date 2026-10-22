@@ -19,7 +19,8 @@
 | `src/frontend/src/primitives/Slider.tsx`, `src/frontend/src/stores/participantAudio.ts`, компоненты громкости в `features/participants`, `features/participantTile`, `features/rooms` | громкость участников и, отдельно, звука их трансляции |
 | `src/frontend/src/features/rooms/livekit/utils/screenShare.ts`, `startScreenShare.ts`, `hooks/useScreenShareToggle.ts`, `src/frontend/src/features/notifications/components/ToastScreenShareAudioNotShared.tsx` | демонстрация экрана: захват без звука самой встречи (`restrictOwnAudio`, иначе звук не передаётся и показывается уведомление), публикация в VP8 с simulcast и стереозвуком |
 | `src/frontend/src/features/rooms/livekit/components/ConnectionStateToast.tsx` | переводимая замена уведомления о подключении из `@livekit/components-react` (там тексты зашиты по-английски) |
-| `src/frontend/src/locales/*/transcription.json`, `*/participantAudio.json`, `*/screenShare.json` | строки новых функций (отдельные пространства имён, чтобы не трогать файлы upstream) |
+| `src/frontend/src/features/calls/` | главная вошедшего пользователя в духе Яндекс Телемоста (при `calls.enabled`): панель разделов, список звонков с поиском, карточки «Новый звонок», «Подключиться к звонку», «Запланировать в Календаре» (.ics и ссылка Google Календаря), ссылка-приглашение; звонок `/calls/<id>` с вкладками «Чат», «Расшифровка», «Записи», «Участники»; `ChatPersistence` — отправка своих сообщений чата в историю звонка |
+| `src/frontend/src/locales/*/transcription.json`, `*/participantAudio.json`, `*/screenShare.json`, `{en,ru,fr}/calls.json` | строки новых функций (отдельные пространства имён, чтобы не трогать файлы upstream) |
 | `src/frontend/src/stores/theme.ts`, `stores/theme.test.ts`, `hooks/useApplyTheme.ts`, `features/settings/components/AppearanceFields.tsx`, `locales/{en,ru,fr}/appearance.json` | тёмная тема: выбор «Как в системе / Светлая / Тёмная» (хранится в браузере, ключ `app_theme`), `data-theme` на `<html>` и в окне «Картинка в картинке» |
 | `src/frontend/src/locales/ru/`, `src/backend/locale/ru_RU/`, `src/summary/summary/core/locales/ru.py` | русская локализация |
 | `bin/check-i18n-ru` | проверка, что ключи `ru` совпадают с `en` |
@@ -38,15 +39,15 @@
 | `src/backend/meet/settings.py` | приложения `transcripts` и `calls`, настройки `TRANSCRIPTION_*` и `CALLS_*`; `ru-ru` первым в `LANGUAGES`, `LANGUAGE_CODE = "ru-ru"` (в конфигурации `Test` оставлен `en-us`, потому что тесты upstream проверяют английские тексты) |
 | `src/backend/meet/urls.py` | подключение `transcripts.urls` и `calls.urls` |
 | `src/backend/core/api/__init__.py` | `transcription.enabled` и `calls.enabled` в `/api/v1.0/config/` |
-| `src/frontend/src/api/useConfig.ts` | тип `transcription` в конфигурации; удалены `use_french_gov_footer` и `use_proconnect_button` |
-| `src/frontend/src/routes.ts` | маршрут `/my-recordings`; удалены юридические страницы (`/mentions-legales`, `/accessibilite`, `/conditions-utilisation`) |
+| `src/frontend/src/api/useConfig.ts` | типы `transcription` и `calls` в конфигурации; удалены `use_french_gov_footer` и `use_proconnect_button` |
+| `src/frontend/src/routes.ts` | маршруты `/my-recordings` и `/calls/<id>` (звонок из истории); удалены юридические страницы (`/mentions-legales`, `/accessibilite`, `/conditions-utilisation`) |
 | `src/frontend/src/layout/Header.tsx` | пункт «Мои записи и расшифровки» в меню пользователя; `BrandLogo` вместо `/assets/logo.svg`; без проверок удалённых юридических страниц |
 | `src/frontend/src/features/rooms/livekit/prefabs/ControlBar/DesktopControlBar.tsx`, `MobileControlBar.tsx` | кнопки «Расшифровка» и «Запись» |
 | `src/frontend/src/features/settings/components/SettingsDialogExtended.tsx`, `tabs/TranscriptionTab.tsx` | вкладка «Расшифровка» в настройках: выбор модели распознавания для тех, кто может запускать расшифровку; язык встречи (WhisperX) показан, только если доступен режим записи `transcript` |
-| `src/frontend/src/features/rooms/livekit/prefabs/VideoConference.tsx` | провайдер расшифровки, синхронизатор громкости, переводимый `ConnectionStateToast` |
+| `src/frontend/src/features/rooms/livekit/prefabs/VideoConference.tsx` | провайдер расшифровки, синхронизатор громкости, переводимый `ConnectionStateToast`, `ChatPersistence` рядом с `ChatProvider` |
 | `src/frontend/src/features/pip/components/PipView.tsx` | переводимый `ConnectionStateToast` |
 | `src/frontend/src/features/rooms/livekit/components/controls/StartMediaButton.tsx` | перевод «Start Audio» и «Start Video» |
-| `src/frontend/src/locales/{en,fr,de,es,nl}/rooms.json` | ключи `controls.startMedia.*` и `connectionState.*` для двух строк выше; удалены `error.screenShare.helpLinkText` и `helpLinkLabel` |
+| `src/frontend/src/locales/{en,fr,de,es,nl}/rooms.json` | ключи `controls.startMedia.*` и `connectionState.*` для двух строк выше; удалены `error.screenShare.helpLinkText` и `helpLinkLabel`; `chat.disclaimer`: сообщения сохраняются в истории звонка |
 | `src/frontend/src/features/rooms/components/Conference.tsx` | `webAudioMix` там, где браузер поддерживает усиление выше 100 %; `userConfig` — снимок `userChoicesStore` при монтировании вместо `usePersistentUserChoices` (иначе при «Создать встречу» читалось старое состояние из localStorage) |
 | `src/frontend/src/features/participants/components/menu/ParticipantMenu.tsx`, `ParticipantMenuButton.tsx` | ползунок громкости и «Выключить звук для меня» |
 | `src/frontend/src/features/participantTile/components/ParticipantMetadata.tsx`, `participantTileFocus/ParticipantTileFocus.tsx` | кнопка громкости на плитке и значок «звук выключен для вас»; на плитке трансляции со звуком — громкость трансляции и значок «звук трансляции выключен для вас» |
@@ -58,6 +59,7 @@
 | `src/frontend/src/features/sdk/routes/SettingsPopup.tsx` | `BrandLogo` вместо `/assets/logo.svg` |
 | `src/frontend/src/layout/Footer.tsx` | `export const Footer = () => null`: футер upstream — футер французского государства |
 | `src/frontend/src/components/LoginButton.tsx`, `features/home/routes/Home.tsx`, `features/recording/components/LoginPrompt.tsx` | вход без ProConnect: обычная кнопка, без prop `proConnectHint` и подгонки высоты кнопки |
+| `src/frontend/src/features/home/routes/Home.tsx` | вошедшему пользователю при `calls.enabled` — история звонков (`features/calls`, загружается отдельно); главная без входа не изменилась |
 | `src/frontend/src/features/rooms/livekit/components/ScreenShareErrorModal.tsx` | без ссылки на справку La Suite |
 | `src/frontend/src/features/home/components/MoreLink.tsx`, `src/frontend/.env.production`, `src/frontend/.env.development` | название по умолчанию `Fusion Meet` |
 | `src/frontend/src/locales/{en,fr,de,es,nl}/global.json` | удалены `footer` и `login.proconnect*` |
