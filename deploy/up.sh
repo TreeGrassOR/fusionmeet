@@ -222,8 +222,9 @@ prepare_env() {
 # check_dns: every public name must resolve to PUBLIC_IP (or to LAN_IP, through a
 # local DNS of the home network). A main name that does not resolve stops up.sh:
 # Caddy would never get its certificate, and each failed attempt counts against
-# the Let's Encrypt limits. A name of MEET_REDIRECT_HOSTS that does not resolve
-# is left out of this run (Caddy and the host nginx), with a warning.
+# the Let's Encrypt limits. A name of MEET_REDIRECT_HOSTS that does not resolve,
+# or resolves to another address, is left out of this run (Caddy and the host
+# nginx), with a warning.
 check_dns() {
   step "DNS"
   local public_ip lan_ip item key host resolved missing=() keys=() kept=()
@@ -246,11 +247,17 @@ check_dns() {
   if ((${#missing[@]} > 0)); then
     local records=''
     for host in "${missing[@]}"; do records+=$(printf '\n  %s  A  %s' "$host" "$public_ip"); done
+    # An empty MEET_HOST is meet.<BASE_DOMAIN>, which must not stay a redirect name
+    local redirect_note='' default_meet
+    default_meet=meet.$(env_get "$FM_ENV_FILE" BASE_DOMAIN)
+    if [[ " ${keys[*]} " == *" MEET_HOST "* && " ${FM_REDIRECT_HOSTS[*]} " == *" $default_meet "* ]]; then
+      redirect_note=" (и уберите $default_meet из MEET_REDIRECT_HOSTS)"
+    fi
     die "не найдены в DNS: ${missing[*]}.
 Добавьте у регистратора домена A-записи (или одну запись * на все поддомены):$records
 Если записи уже добавлены, подождите до 30 минут: DNS-серверы помнят прежний ответ
 «такого имени нет». Затем запустите up.sh снова. Либо оставьте пустыми ${keys[*]}
-в $FM_ENV_FILE: тогда используются имена от BASE_DOMAIN."
+в $FM_ENV_FILE$redirect_note: тогда используются имена от BASE_DOMAIN."
   fi
   for host in "${FM_REDIRECT_HOSTS[@]}"; do
     resolved=$(fm_resolve "$host")
@@ -259,10 +266,11 @@ check_dns() {
       continue
     fi
     if [[ $resolved != "$public_ip" && $resolved != "$lan_ip" ]]; then
-      warn "$host указывает на $resolved, а PUBLIC_IP=$public_ip: сертификат не выпустится"
-    else
-      ok "$host -> $resolved (перенаправление на $FM_MEET_HOST)"
+      # Caddy would not get its certificate and would keep trying
+      warn "$host (MEET_REDIRECT_HOSTS) указывает на $resolved, а PUBLIC_IP=$public_ip: в этот раз пропущен. Исправьте A-запись $host -> $public_ip и запустите up.sh снова"
+      continue
     fi
+    ok "$host -> $resolved (перенаправление на $FM_MEET_HOST)"
     kept+=("$host")
   done
   FM_REDIRECT_HOSTS=("${kept[@]}")
@@ -353,7 +361,10 @@ step "Обратный прокси"
 hn_resolve_mode
 fm_compose config --quiet
 if [[ $HN_MODE == nginx ]]; then
-  hn_before_up "${FM_HOSTS[@]}"
+  # Names taken by other sites stop up.sh before the long build; nginx itself
+  # changes only right before "up" (hn_before_up)
+  hn_check_names "${FM_HOSTS[@]}"
+  ok "имена FusionMeet не заняты другими сайтами nginx сервера"
 else
   # Back from PROXY_MODE=nginx: the forwarding of the host nginx is not needed
   for path in "/etc/nginx/conf.d/$HN_CONF_NAME" "/etc/nginx/sites-enabled/$HN_CONF_NAME"; do
@@ -377,6 +388,7 @@ step "Сборка образов (frontend, backend, agents, asr)"
 fm_compose build
 
 step "Запуск и ожидание healthcheck всех сервисов"
+if [[ $HN_MODE == nginx ]]; then hn_before_up "${FM_HOSTS[@]}"; fi
 note "Первый запуск дольше: Keycloak собирает себя, asr скачивает веса моделей распознавания (~2,5 ГБ)."
 note "Ход загрузки моделей: sudo docker compose -f $FM_COMPOSE_FILE logs -f asr"
 if ! fm_compose up --detach --wait --wait-timeout "${UP_WAIT_TIMEOUT:-3600}" --remove-orphans; then
@@ -397,10 +409,8 @@ if [[ -n $livekit_before && $(fm_compose ps --quiet livekit 2>/dev/null) == "$li
   fm_compose restart livekit >/dev/null
   ok "LiveKit перезапущен с новыми UDP-буферами (идущие звонки переподключаются сами)"
 fi
-if [[ $HN_MODE == nginx ]]; then
-  step "HTTPS через nginx сервера"
-  hn_after_up "${FM_HOSTS[@]}"
-fi
+# The Keycloak steps only need the keycloak container: they come before the wait
+# for certificates, which may stop up.sh
 step "Регистрация в Keycloak"
 registration=$(env_get "$FM_ENV_FILE" KEYCLOAK_REGISTRATION_ALLOWED)
 registration=${registration:-false}
@@ -435,6 +445,11 @@ echo "$APP_TITLE"
 ' "$meet_url") || die "не удалось обновить клиент meet и realm в Keycloak (см. сообщение выше)"
 ok "вход через Keycloak возвращает на $meet_url"
 ok "название на странице входа: ${title##*$'\n'}"
+
+if [[ $HN_MODE == nginx ]]; then
+  step "HTTPS через nginx сервера"
+  hn_after_up "$FM_MEET_HOST $FM_KEYCLOAK_HOST $FM_LIVEKIT_HOST" "${FM_HOSTS[@]}"
+fi
 
 fm_compose ps
 print_summary
