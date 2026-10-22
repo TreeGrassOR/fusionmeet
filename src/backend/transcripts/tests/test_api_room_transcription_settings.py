@@ -49,7 +49,7 @@ def test_transcription_settings_anonymous(
     room = RoomFactory()
 
     assert APIClient().get(settings_url(room)).status_code == expected_status
-    response = put_model(APIClient(), room, "parakeet-v3")
+    response = put_model(APIClient(), room, "gigaam-multilingual-punct")
 
     assert response.status_code == expected_status
     assert RoomTranscriptionSettings.objects.count() == 0
@@ -62,7 +62,7 @@ def test_transcription_settings_disabled(settings, asr_service):
     client, _ = owner_client(room)
 
     assert client.get(settings_url(room)).status_code == 404
-    assert put_model(client, room, "parakeet-v3").status_code == 404
+    assert put_model(client, room, "gigaam-multilingual-punct").status_code == 404
     assert RoomTranscriptionSettings.objects.count() == 0
     assert len(asr_service.calls) == 0
 
@@ -79,7 +79,7 @@ def test_transcription_settings_restricted_room_member(
     client, _ = owner_client(room, role=RoleChoices.MEMBER)
 
     assert client.get(settings_url(room)).status_code == 403
-    response = put_model(client, room, "parakeet-v3")
+    response = put_model(client, room, "gigaam-multilingual-punct")
 
     assert response.status_code == 403
     assert RoomTranscriptionSettings.objects.count() == 0
@@ -97,7 +97,7 @@ def test_transcription_settings_open_room_absent_user(
     client = APIClient()
     client.force_login(UserFactory())
 
-    response = put_model(client, room, "parakeet-v3")
+    response = put_model(client, room, "gigaam-multilingual-punct")
 
     assert response.status_code == 403
     assert RoomTranscriptionSettings.objects.count() == 0
@@ -116,7 +116,7 @@ def test_transcription_settings_open_room_present_user(
     client = APIClient()
     client.force_login(user)
 
-    response = put_model(client, room, "parakeet-v3")
+    response = put_model(client, room, "gigaam-multilingual-punct")
 
     assert response.status_code == 200
     assert RoomTranscriptionSettings.objects.get(room=room).updated_by == user
@@ -129,7 +129,7 @@ def test_transcription_settings_deleted_room(transcription_enabled, asr_service)
     room.soft_delete()
 
     assert client.get(settings_url(room)).status_code == 410
-    assert put_model(client, room, "parakeet-v3").status_code == 410
+    assert put_model(client, room, "gigaam-multilingual-punct").status_code == 410
     assert RoomTranscriptionSettings.objects.count() == 0
 
 
@@ -164,14 +164,16 @@ def test_transcription_settings_get_default(transcription_enabled, asr_service, 
 def test_transcription_settings_get_chosen(transcription_enabled, asr_service):
     """The model chosen for the room is returned, without calling the ASR service."""
     room = RoomFactory()
-    RoomTranscriptionSettings.objects.create(room=room, asr_model="parakeet-v3")
+    RoomTranscriptionSettings.objects.create(
+        room=room, asr_model="gigaam-multilingual-punct"
+    )
     RoomTranscriptionSettings.objects.create(room=RoomFactory(), asr_model="gigaam-v3")
     client, _ = owner_client(room)
 
     response = client.get(settings_url(room))
 
     assert response.status_code == 200
-    assert response.json() == {"asr_model": "parakeet-v3"}
+    assert response.json() == {"asr_model": "gigaam-multilingual-punct"}
     assert len(asr_service.calls) == 0
 
 
@@ -195,15 +197,17 @@ def test_transcription_settings_put(transcription_enabled, asr_service, role):
     room = RoomFactory()
     client, user = owner_client(room, role=role)
 
-    response = put_model(client, room, "parakeet-v3")
+    response = put_model(client, room, "gigaam-multilingual-punct")
 
     assert response.status_code == 200
-    assert response.json() == {"asr_model": "parakeet-v3"}
+    assert response.json() == {"asr_model": "gigaam-multilingual-punct"}
     room_settings = RoomTranscriptionSettings.objects.get()
     assert room_settings.room == room
-    assert room_settings.asr_model == "parakeet-v3"
+    assert room_settings.asr_model == "gigaam-multilingual-punct"
     assert room_settings.updated_by == user
-    assert client.get(settings_url(room)).json() == {"asr_model": "parakeet-v3"}
+    assert client.get(settings_url(room)).json() == {
+        "asr_model": "gigaam-multilingual-punct"
+    }
 
 
 def test_transcription_settings_put_change(transcription_enabled, asr_service):
@@ -212,7 +216,7 @@ def test_transcription_settings_put_change(transcription_enabled, asr_service):
     first_client, _ = owner_client(room)
     second_client, second_user = owner_client(room)
 
-    assert put_model(first_client, room, "parakeet-v3").status_code == 200
+    assert put_model(first_client, room, "gigaam-multilingual-punct").status_code == 200
     response = put_model(second_client, room, "gigaam-v3")
 
     assert response.status_code == 200
@@ -227,7 +231,9 @@ def test_transcription_settings_put_change(transcription_enabled, asr_service):
 def test_transcription_settings_put_null(transcription_enabled, asr_service):
     """Null resets the room to the default model, without calling the ASR service."""
     room = RoomFactory()
-    RoomTranscriptionSettings.objects.create(room=room, asr_model="parakeet-v3")
+    RoomTranscriptionSettings.objects.create(
+        room=room, asr_model="gigaam-multilingual-punct"
+    )
     client, user = owner_client(room)
     transcription_enabled.TRANSCRIPTION_ASR_URL = None
 
@@ -250,10 +256,12 @@ def test_transcription_settings_put_loading_model(transcription_enabled, asr_ser
     room = RoomFactory()
     client, _ = owner_client(room)
 
-    response = put_model(client, room, "parakeet-v3")
+    response = put_model(client, room, "gigaam-multilingual-punct")
 
     assert response.status_code == 200
-    assert RoomTranscriptionSettings.objects.get().asr_model == "parakeet-v3"
+    assert (
+        RoomTranscriptionSettings.objects.get().asr_model == "gigaam-multilingual-punct"
+    )
 
 
 @pytest.mark.parametrize(
@@ -272,14 +280,18 @@ def test_transcription_settings_put_invalid_model(
 ):
     """Unknown and failed models are refused."""
     room = RoomFactory()
-    RoomTranscriptionSettings.objects.create(room=room, asr_model="parakeet-v3")
+    RoomTranscriptionSettings.objects.create(
+        room=room, asr_model="gigaam-multilingual-punct"
+    )
     client, _ = owner_client(room)
 
     response = put_model(client, room, asr_model)
 
     assert response.status_code == 400
     assert response.json() == {"asr_model": [error]}
-    assert RoomTranscriptionSettings.objects.get().asr_model == "parakeet-v3"
+    assert (
+        RoomTranscriptionSettings.objects.get().asr_model == "gigaam-multilingual-punct"
+    )
 
 
 @pytest.mark.parametrize(
@@ -317,7 +329,7 @@ def test_transcription_settings_put_asr_unavailable(
     room = RoomFactory()
     client, _ = owner_client(room)
 
-    response = put_model(client, room, "parakeet-v3")
+    response = put_model(client, room, "gigaam-multilingual-punct")
 
     assert response.status_code == 503
     assert response.json() == {"detail": "The recognition models are unavailable."}
@@ -332,7 +344,7 @@ def test_transcription_settings_put_asr_not_configured(
     room = RoomFactory()
     client, _ = owner_client(room)
 
-    response = put_model(client, room, "parakeet-v3")
+    response = put_model(client, room, "gigaam-multilingual-punct")
 
     assert response.status_code == 503
     assert RoomTranscriptionSettings.objects.count() == 0
@@ -347,7 +359,7 @@ def test_transcription_settings_other_methods(
     client, _ = owner_client(room)
 
     response = getattr(client, method)(
-        settings_url(room), {"asr_model": "parakeet-v3"}, format="json"
+        settings_url(room), {"asr_model": "gigaam-multilingual-punct"}, format="json"
     )
 
     assert response.status_code == 405

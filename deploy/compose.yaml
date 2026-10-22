@@ -9,10 +9,12 @@
 #
 # Network layout:
 # - caddy publishes 80/tcp, 443/tcp and 443/udp (or, when an nginx of the host
-#   already owns 80/443, only 127.0.0.1 ports that this nginx forwards the three
-#   names to: PROXY_MODE in deploy/.env), gets Let's Encrypt certificates
-#   (HTTP-01) and proxies meet.<BASE_DOMAIN> -> frontend:8083,
-#   id.<BASE_DOMAIN> -> keycloak:8080, livekit.<BASE_DOMAIN> -> LiveKit on the host.
+#   already owns 80/443, only 127.0.0.1 ports that this nginx forwards the
+#   FusionMeet names to: PROXY_MODE in deploy/.env), gets Let's Encrypt
+#   certificates (HTTP-01) and proxies MEET_HOST -> frontend:8083,
+#   KEYCLOAK_HOST -> keycloak:8080, LIVEKIT_HOST -> LiveKit on the host; the names
+#   of MEET_REDIRECT_HOSTS answer with a redirect to MEET_HOST. An empty
+#   MEET_HOST, KEYCLOAK_HOST or LIVEKIT_HOST means meet., id. or livekit.<BASE_DOMAIN>.
 #   Its network aliases make the three public names resolve to Caddy inside the
 #   compose network, so containers reach them without NAT loopback on the router.
 # - livekit uses the host network (7880/tcp signalling, 7881/tcp ICE-TCP,
@@ -60,8 +62,8 @@ x-backend-env: &backend-env
   DJANGO_CONFIGURATION: Production
   DJANGO_SETTINGS_MODULE: meet.settings
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-  DJANGO_ALLOWED_HOSTS: meet.${BASE_DOMAIN}
-  DJANGO_CSRF_TRUSTED_ORIGINS: https://meet.${BASE_DOMAIN}
+  DJANGO_ALLOWED_HOSTS: ${MEET_HOST:-meet.${BASE_DOMAIN}}
+  DJANGO_CSRF_TRUSTED_ORIGINS: https://${MEET_HOST:-meet.${BASE_DOMAIN}}
   # Russian by default. LANGUAGES must contain LANGUAGE_CODE (Django check
   # translation.E004), so the list is set here too; the other codes stay valid
   # for users who picked them.
@@ -76,13 +78,13 @@ x-backend-env: &backend-env
   DB_PASSWORD: ${POSTGRES_PASSWORD}
   REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
   # Media (recordings are downloaded through the frontend nginx, see nginx/meet.conf)
-  MEDIA_BASE_URL: https://meet.${BASE_DOMAIN}
+  MEDIA_BASE_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}
   # OIDC: realm "meet" of Keycloak (keycloak/meet-realm.json)
-  OIDC_OP_JWKS_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/certs
-  OIDC_OP_AUTHORIZATION_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/auth
-  OIDC_OP_TOKEN_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/token
-  OIDC_OP_USER_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/userinfo
-  OIDC_OP_LOGOUT_ENDPOINT: https://id.${BASE_DOMAIN}/realms/meet/protocol/openid-connect/logout
+  OIDC_OP_JWKS_ENDPOINT: https://${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}/realms/meet/protocol/openid-connect/certs
+  OIDC_OP_AUTHORIZATION_ENDPOINT: https://${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}/realms/meet/protocol/openid-connect/auth
+  OIDC_OP_TOKEN_ENDPOINT: https://${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}/realms/meet/protocol/openid-connect/token
+  OIDC_OP_USER_ENDPOINT: https://${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}/realms/meet/protocol/openid-connect/userinfo
+  OIDC_OP_LOGOUT_ENDPOINT: https://${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}/realms/meet/protocol/openid-connect/logout
   OIDC_RP_CLIENT_ID: meet
   OIDC_RP_CLIENT_SECRET: ${OIDC_RP_CLIENT_SECRET}
   OIDC_RP_SIGN_ALGO: RS256
@@ -90,14 +92,14 @@ x-backend-env: &backend-env
   # Keycloak's "profile" scope emits given_name / family_name
   OIDC_USERINFO_FULLNAME_FIELDS: given_name,family_name
   OIDC_USERINFO_SHORTNAME_FIELD: given_name
-  OIDC_REDIRECT_ALLOWED_HOSTS: meet.${BASE_DOMAIN}
-  LOGIN_REDIRECT_URL: https://meet.${BASE_DOMAIN}
-  LOGIN_REDIRECT_URL_FAILURE: https://meet.${BASE_DOMAIN}
-  LOGOUT_REDIRECT_URL: https://meet.${BASE_DOMAIN}
+  OIDC_REDIRECT_ALLOWED_HOSTS: ${MEET_HOST:-meet.${BASE_DOMAIN}}
+  LOGIN_REDIRECT_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}
+  LOGIN_REDIRECT_URL_FAILURE: https://${MEET_HOST:-meet.${BASE_DOMAIN}}
+  LOGOUT_REDIRECT_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}
   # LiveKit: one public URL for browsers and for the backend's API calls
   LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
   LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
-  LIVEKIT_API_URL: https://livekit.${BASE_DOMAIN}
+  LIVEKIT_API_URL: https://${LIVEKIT_HOST:-livekit.${BASE_DOMAIN}}
   LIVEKIT_FORCE_WSS_PROTOCOL: "True"
   # Rooms: only users with an account create rooms; guests join public rooms by link
   ALLOW_UNREGISTERED_ROOMS: "False"
@@ -108,7 +110,7 @@ x-backend-env: &backend-env
   RECORDING_WORKER_CLASSES: '{"screen_recording": "core.recording.worker.services.VideoCompositeEgressService"}'
   # Only the room owner and administrators (moderators) may record or transcribe
   RECORDING_AUTHENTICATED_PARTICIPANTS_ENABLED: "False"
-  RECORDING_DOWNLOAD_BASE_URL: https://meet.${BASE_DOMAIN}/recording
+  RECORDING_DOWNLOAD_BASE_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}/recording
   ANALYTICS_BACKEND_SETTINGS: '{"feature_flags": {"summary-enabled": False}}'
   # Agents (names must match TRANSCRIBER_AGENT_NAME / METADATA_COLLECTOR_AGENT_NAME)
   ROOM_SUBTITLE_ENABLED: "True"
@@ -121,10 +123,13 @@ x-backend-env: &backend-env
   TRANSCRIPTION_AGENT_TOKEN: ${TRANSCRIPTION_AGENT_TOKEN}
   TRANSCRIPTION_S3_PREFIX: transcriptions
   TRANSCRIPTION_LANGUAGE: ru
-  TRANSCRIPTION_LIST_URL: https://meet.${BASE_DOMAIN}/my-recordings
+  TRANSCRIPTION_LIST_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}/my-recordings
   # Recognition models a room can choose from (GET /v1/models of the asr service)
   TRANSCRIPTION_ASR_URL: http://asr:8000
   TRANSCRIPTION_ASR_API_KEY: ${ASR_API_KEY}
+  # Call history (backend app "calls"): sessions, participants and chat messages,
+  # fed by the second LiveKit webhook (livekit service below)
+  CALLS_HISTORY_ENABLED: "True"
   # Email: Django's console backend unless SMTP_HOST is set in deploy/.env
   DJANGO_EMAIL_BACKEND: django.core.mail.backends.${EMAIL_BACKEND_KIND:-console}.EmailBackend
   DJANGO_EMAIL_HOST: ${SMTP_HOST:-}
@@ -133,12 +138,12 @@ x-backend-env: &backend-env
   DJANGO_EMAIL_HOST_PASSWORD: ${SMTP_PASSWORD:-}
   DJANGO_EMAIL_USE_TLS: ${SMTP_USE_TLS:-true}
   DJANGO_EMAIL_USE_SSL: ${SMTP_USE_SSL:-false}
-  DJANGO_EMAIL_FROM: ${SMTP_FROM:-noreply@meet.${BASE_DOMAIN}}
-  DJANGO_EMAIL_BRAND_NAME: ${APP_TITLE:-FusionMeet}
-  DJANGO_EMAIL_LOGO_IMG: https://meet.${BASE_DOMAIN}/android-chrome-512x512.png
+  DJANGO_EMAIL_FROM: ${SMTP_FROM:-noreply@${MEET_HOST:-meet.${BASE_DOMAIN}}}
+  DJANGO_EMAIL_BRAND_NAME: ${APP_TITLE:-Fusion Meet}
+  DJANGO_EMAIL_LOGO_IMG: https://${MEET_HOST:-meet.${BASE_DOMAIN}}/assets/fusion-meet-email.png
   DJANGO_EMAIL_SUPPORT_EMAIL: ${SUPPORT_EMAIL:-${ACME_EMAIL}}
-  DJANGO_EMAIL_DOMAIN: meet.${BASE_DOMAIN}
-  DJANGO_EMAIL_APP_BASE_URL: https://meet.${BASE_DOMAIN}
+  DJANGO_EMAIL_DOMAIN: ${MEET_HOST:-meet.${BASE_DOMAIN}}
+  DJANGO_EMAIL_APP_BASE_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}
 
 # Images built here exist only locally: "pull_policy: never" stops compose from
 # first looking for fusionmeet/*:local on Docker Hub (the names are not ours
@@ -190,9 +195,11 @@ services:
     environment:
       ACME_EMAIL: ${ACME_EMAIL}
       ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
-      MEET_HOST: meet.${BASE_DOMAIN}
-      KEYCLOAK_HOST: id.${BASE_DOMAIN}
-      LIVEKIT_HOST: livekit.${BASE_DOMAIN}
+      MEET_HOST: ${MEET_HOST:-meet.${BASE_DOMAIN}}
+      KEYCLOAK_HOST: ${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}
+      LIVEKIT_HOST: ${LIVEKIT_HOST:-livekit.${BASE_DOMAIN}}
+      # space separated; up.sh leaves out the names that are not in DNS yet
+      MEET_REDIRECT_HOSTS: ${MEET_REDIRECT_HOSTS:-}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -202,9 +209,9 @@ services:
     networks:
       default:
         aliases:
-          - meet.${BASE_DOMAIN}
-          - id.${BASE_DOMAIN}
-          - livekit.${BASE_DOMAIN}
+          - ${MEET_HOST:-meet.${BASE_DOMAIN}}
+          - ${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}
+          - ${LIVEKIT_HOST:-livekit.${BASE_DOMAIN}}
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
       interval: 15s
@@ -284,16 +291,16 @@ services:
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
-      KC_HOSTNAME: https://id.${BASE_DOMAIN}
+      KC_HOSTNAME: https://${KEYCLOAK_HOST:-id.${BASE_DOMAIN}}
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # Placeholders of keycloak/meet-realm.json (imported on the first start only)
-      MEET_HOST: meet.${BASE_DOMAIN}
+      MEET_HOST: ${MEET_HOST:-meet.${BASE_DOMAIN}}
       OIDC_RP_CLIENT_SECRET: ${OIDC_RP_CLIENT_SECRET}
-      APP_TITLE: ${APP_TITLE:-FusionMeet}
+      APP_TITLE: ${APP_TITLE:-Fusion Meet}
     volumes:
       - ./keycloak/meet-realm.json:/opt/keycloak/data/import/meet-realm.json:ro
     depends_on:
@@ -355,7 +362,7 @@ services:
       target: frontend-production
       args:
         DOCKER_USER: ${DOCKER_USER:-1000}
-        VITE_APP_TITLE: ${APP_TITLE:-FusionMeet}
+        VITE_APP_TITLE: ${APP_TITLE:-Fusion Meet}
     restart: unless-stopped
     volumes:
       # Router on :8083: SPA (image's nginx on :8080), /api, /admin, /static -> backend,
@@ -383,7 +390,7 @@ services:
     network_mode: host
     extra_hosts:
       # Webhooks go to the public URL through Caddy's published 443 on this host
-      - meet.${BASE_DOMAIN}:127.0.0.1
+      - ${MEET_HOST:-meet.${BASE_DOMAIN}}:127.0.0.1
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       LIVEKIT_CONFIG: |
@@ -395,7 +402,9 @@ services:
         webhook:
           api_key: ${LIVEKIT_API_KEY}
           urls:
-            - https://meet.${BASE_DOMAIN}/api/v1.0/rooms/webhooks-livekit/
+            - https://${MEET_HOST:-meet.${BASE_DOMAIN}}/api/v1.0/rooms/webhooks-livekit/
+            # call history (CALLS_HISTORY_ENABLED of the backend)
+            - https://${MEET_HOST:-meet.${BASE_DOMAIN}}/api/v1.0/calls/webhooks-livekit/
         rtc:
           tcp_port: 7881
           udp_port: 7882
@@ -477,9 +486,9 @@ services:
       TRANSCRIPT_FLUSH_INTERVAL_S: "5"
       TRANSCRIPT_FINALIZE_GRACE_S: "5"
       TRANSCRIPT_TIMEZONE: ${TRANSCRIPT_TIMEZONE:-Europe/Moscow}
-      TRANSCRIPTION_HOOK_URL: https://meet.${BASE_DOMAIN}/api/v1.0/transcripts/agent-hook/
+      TRANSCRIPTION_HOOK_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}/api/v1.0/transcripts/agent-hook/
       # Recognition model chosen for the room (sent to asr as ?model=)
-      TRANSCRIPTION_SETTINGS_URL: https://meet.${BASE_DOMAIN}/api/v1.0/transcripts/agent-settings/
+      TRANSCRIPTION_SETTINGS_URL: https://${MEET_HOST:-meet.${BASE_DOMAIN}}/api/v1.0/transcripts/agent-settings/
       TRANSCRIPTION_AGENT_TOKEN: ${TRANSCRIPTION_AGENT_TOKEN}
 
   agents-metadata-collector:
@@ -503,7 +512,7 @@ services:
     restart: unless-stopped
     environment:
       ASR_API_KEY: ${ASR_API_KEY}
-      ASR_MODELS: ${ASR_MODELS:-gigaam-v3,parakeet-v3,gigaam-multilingual,gigaam-multilingual-punct}
+      ASR_MODELS: ${ASR_MODELS:-gigaam-v3,gigaam-multilingual,gigaam-multilingual-punct}
       ASR_DEFAULT_MODEL: ${ASR_DEFAULT_MODEL:-gigaam-v3}
       # empty: half of the CPUs
       ASR_CPU_THREADS: ${ASR_CPU_THREADS:-}
@@ -522,7 +531,7 @@ services:
       HF_HOME: /models
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     volumes:
-      # Hugging Face cache: the weights are downloaded once (about 5 GB for all
+      # Hugging Face cache: the weights are downloaded once (about 2.5 GB for all
       # the models)
       - asr-models:/models
     deploy:
@@ -537,7 +546,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      # the first start downloads the weights (about 5 GB; /health answers once
+      # the first start downloads the weights (about 2.5 GB; /health answers once
       # the default model is loaded, the others keep loading after it)
       start_period: 7200s
     logging: *logging

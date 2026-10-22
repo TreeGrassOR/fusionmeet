@@ -58,10 +58,10 @@ def make_settings(backend, clock=None, ttl_s=15.0) -> RoomSettings:
 
 async def test_reads_the_model_of_the_room_with_the_agent_token():
     """GET ?room=<LiveKit room name> with the Bearer agent token."""
-    backend = FakeBackend(default={"asr_model": "parakeet-v3"})
+    backend = FakeBackend(default={"asr_model": "gigaam-multilingual-punct"})
     settings = make_settings(backend)
 
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
 
     (request,) = backend.requests
     assert request.method == "GET"
@@ -74,14 +74,14 @@ async def test_reads_the_model_of_the_room_with_the_agent_token():
 async def test_value_is_cached_for_the_ttl():
     """The backend is read again only once the TTL has elapsed."""
     backend = FakeBackend(
-        answers=[{"asr_model": "parakeet-v3"}, {"asr_model": "gigaam-v3"}]
+        answers=[{"asr_model": "gigaam-multilingual-punct"}, {"asr_model": "gigaam-v3"}]
     )
     clock = Clock()
     settings = make_settings(backend, clock)
 
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
     clock.now = 14.9
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
     assert len(backend.requests) == 1
     clock.now = 15.0
     assert await settings.asr_model() == "gigaam-v3"
@@ -91,11 +91,13 @@ async def test_value_is_cached_for_the_ttl():
 
 async def test_null_means_the_asr_default():
     """``null`` (no model chosen, or reset) resolves to None."""
-    backend = FakeBackend(answers=[{"asr_model": "parakeet-v3"}, {"asr_model": None}])
+    backend = FakeBackend(
+        answers=[{"asr_model": "gigaam-multilingual-punct"}, {"asr_model": None}]
+    )
     clock = Clock()
     settings = make_settings(backend, clock)
 
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
     clock.now = 20
     assert await settings.asr_model() is None
     await settings.aclose()
@@ -120,18 +122,22 @@ async def test_null_means_the_asr_default():
 async def test_errors_keep_the_last_value(failure, caplog):
     """A failed read keeps the last value and is tried again after the TTL."""
     backend = FakeBackend(
-        answers=[{"asr_model": "parakeet-v3"}, failure, {"asr_model": "gigaam-v3"}]
+        answers=[
+            {"asr_model": "gigaam-multilingual-punct"},
+            failure,
+            {"asr_model": "gigaam-v3"},
+        ]
     )
     clock = Clock()
     settings = make_settings(backend, clock)
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
 
     clock.now = 15
     with caplog.at_level(logging.WARNING, logger="transcription-settings"):
-        assert await settings.asr_model() == "parakeet-v3"
-    assert "keeping the recognition model parakeet-v3" in caplog.text
+        assert await settings.asr_model() == "gigaam-multilingual-punct"
+    assert "keeping the recognition model gigaam-multilingual-punct" in caplog.text
     clock.now = 29  # not hammering a failing backend
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
     assert len(backend.requests) == 2
 
     clock.now = 30
@@ -170,7 +176,7 @@ async def test_cancelled_read_is_done_again():
         if len(calls) == 1:
             reading.set()
             await asyncio.Event().wait()  # until cancelled
-        return httpx.Response(200, json={"asr_model": "parakeet-v3"})
+        return httpx.Response(200, json={"asr_model": "gigaam-multilingual-punct"})
 
     settings = make_settings(backend)
     task = asyncio.create_task(settings.asr_model())
@@ -179,7 +185,7 @@ async def test_cancelled_read_is_done_again():
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
     assert len(calls) == 2
     await settings.aclose()
 
@@ -192,7 +198,7 @@ async def test_hanging_backend_is_bounded_as_a_whole(caplog):
         calls.append(request)
         if len(calls) == 2:
             await asyncio.Event().wait()  # never answers
-        return httpx.Response(200, json={"asr_model": "parakeet-v3"})
+        return httpx.Response(200, json={"asr_model": "gigaam-multilingual-punct"})
 
     clock = Clock()
     settings = RoomSettings(
@@ -203,33 +209,35 @@ async def test_hanging_backend_is_bounded_as_a_whole(caplog):
         transport=httpx.MockTransport(backend),
         clock=clock,
     )
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
 
     clock.now = 15
     with caplog.at_level(logging.WARNING, logger="transcription-settings"):
         value = await asyncio.wait_for(settings.asr_model(), timeout=5)
-    assert value == "parakeet-v3"
+    assert value == "gigaam-multilingual-punct"
     assert "TimeoutError" in caplog.text
     clock.now = 29
-    assert await settings.asr_model() == "parakeet-v3"
+    assert await settings.asr_model() == "gigaam-multilingual-punct"
     assert len(calls) == 2
     await settings.aclose()
 
 
 async def test_model_change_is_logged(caplog):
     """A new model of the room is logged once."""
-    backend = FakeBackend(default={"asr_model": "parakeet-v3"})
+    backend = FakeBackend(default={"asr_model": "gigaam-multilingual-punct"})
     clock = Clock()
     settings = make_settings(backend, clock, ttl_s=0)
 
     with caplog.at_level(logging.INFO, logger="transcription-settings"):
         for _ in range(3):
-            assert await settings.asr_model() == "parakeet-v3"
+            assert await settings.asr_model() == "gigaam-multilingual-punct"
             clock.now += 1
 
     assert len(backend.requests) == 3  # TTL 0: read for every phrase
     messages = [r.getMessage() for r in caplog.records]
-    assert messages == ["recognition model of room room-uuid: parakeet-v3"]
+    assert messages == [
+        "recognition model of room room-uuid: gigaam-multilingual-punct"
+    ]
     await settings.aclose()
 
 

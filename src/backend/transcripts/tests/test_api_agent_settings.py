@@ -40,7 +40,7 @@ def room_with_model(asr_model):
 def test_agent_settings_disabled_without_token(settings, asr_service, token_setting):
     """The endpoint does not exist when no agent token is configured."""
     settings.TRANSCRIPTION_AGENT_TOKEN = token_setting
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
 
     response = get_agent_settings(str(room.id), token="anything")
 
@@ -53,7 +53,7 @@ def test_agent_settings_disabled_without_token(settings, asr_service, token_sett
 )
 def test_agent_settings_wrong_token(agent_token, asr_service, authorization):
     """Requests without the right Bearer token are rejected."""
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
     headers = {"HTTP_AUTHORIZATION": authorization} if authorization else {}
 
     response = APIClient().get(AGENT_SETTINGS_URL, {"room": str(room.id)}, **headers)
@@ -64,7 +64,7 @@ def test_agent_settings_wrong_token(agent_token, asr_service, authorization):
 
 def test_agent_settings_user_session_rejected(agent_token, asr_service):
     """A logged-in user cannot call the agent endpoint."""
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
     user = UserFactory()
     room.accesses.create(user=user, role=RoleChoices.OWNER)
     client = APIClient()
@@ -120,26 +120,28 @@ def test_agent_settings_reset(agent_token, asr_service):
 
 def test_agent_settings_chosen(agent_token, asr_service):
     """The model chosen for the room is returned while the ASR service offers it."""
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
     room_with_model("gigaam-v3")
 
     response = get_agent_settings(str(room.id))
 
     assert response.status_code == 200
-    assert response.json() == {"asr_model": "parakeet-v3"}
+    assert response.json() == {"asr_model": "gigaam-multilingual-punct"}
 
     # The list of models is cached between the polls of the agent
-    assert get_agent_settings(str(room.id)).json() == {"asr_model": "parakeet-v3"}
+    assert get_agent_settings(str(room.id)).json() == {
+        "asr_model": "gigaam-multilingual-punct"
+    }
     assert len(asr_service.calls) == 1
 
 
 def test_agent_settings_room_id_formats(agent_token, asr_service):
     """The LiveKit room name is the room id, in any UUID spelling."""
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
 
     response = get_agent_settings(str(room.id).upper())
 
-    assert response.json() == {"asr_model": "parakeet-v3"}
+    assert response.json() == {"asr_model": "gigaam-multilingual-punct"}
 
 
 def test_agent_settings_loading_model(agent_token, asr_service):
@@ -147,11 +149,11 @@ def test_agent_settings_loading_model(agent_token, asr_service):
     payload = copy.deepcopy(ASR_MODELS_PAYLOAD)
     payload["models"][1]["status"] = "loading"
     asr_service.replace("GET", ASR_MODELS_URL, json=payload)
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
 
     response = get_agent_settings(str(room.id))
 
-    assert response.json() == {"asr_model": "parakeet-v3"}
+    assert response.json() == {"asr_model": "gigaam-multilingual-punct"}
 
 
 @pytest.mark.parametrize("asr_model", ["gigaam-multilingual", "removed-model"])
@@ -177,22 +179,22 @@ def test_agent_settings_model_not_offered(agent_token, asr_service, asr_model):
 def test_agent_settings_asr_unavailable(agent_token, asr_service, answer):
     """When the list cannot be read, the model chosen for the room is kept."""
     asr_service.replace("GET", ASR_MODELS_URL, **answer)
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
 
     response = get_agent_settings(str(room.id))
 
     assert response.status_code == 200
-    assert response.json() == {"asr_model": "parakeet-v3"}
+    assert response.json() == {"asr_model": "gigaam-multilingual-punct"}
 
 
 def test_agent_settings_asr_not_configured(agent_token, settings):
     """Without TRANSCRIPTION_ASR_URL, the model chosen for the room is kept."""
     settings.TRANSCRIPTION_ASR_URL = None
-    room = room_with_model("parakeet-v3")
+    room = room_with_model("gigaam-multilingual-punct")
 
     response = get_agent_settings(str(room.id))
 
-    assert response.json() == {"asr_model": "parakeet-v3"}
+    assert response.json() == {"asr_model": "gigaam-multilingual-punct"}
 
 
 def test_agent_settings_follows_room_changes(
@@ -208,9 +210,13 @@ def test_agent_settings_follows_room_changes(
 
     assert get_agent_settings(str(room.id)).json() == {"asr_model": None}
 
-    response = client.put(url, {"asr_model": "parakeet-v3"}, format="json")
+    response = client.put(
+        url, {"asr_model": "gigaam-multilingual-punct"}, format="json"
+    )
     assert response.status_code == 200
-    assert get_agent_settings(str(room.id)).json() == {"asr_model": "parakeet-v3"}
+    assert get_agent_settings(str(room.id)).json() == {
+        "asr_model": "gigaam-multilingual-punct"
+    }
 
     response = client.put(url, {"asr_model": None}, format="json")
     assert response.status_code == 200

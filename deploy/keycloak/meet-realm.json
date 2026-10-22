@@ -1,6 +1,6 @@
 {
   "realm": "meet",
-  "displayName": "${APP_TITLE:FusionMeet}",
+  "displayName": "${APP_TITLE:Fusion Meet}",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
@@ -19,7 +19,7 @@
   "clients": [
     {
       "clientId": "meet",
-      "name": "${APP_TITLE:FusionMeet}",
+      "name": "${APP_TITLE:Fusion Meet}",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,

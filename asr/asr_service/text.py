@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-# Special tokens that leak into the text, such as "<unk>" from Parakeet.
+# Special tokens that leak into the text, such as "<unk>".
 _TAG = re.compile(r"<[^<>\s]*>")
 
 

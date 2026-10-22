@@ -34,13 +34,16 @@ async def transcribe(client, model=None, seconds=1.0):
         (None, "clip 16000", "Русский — GigaAM v3"),
         ("", "clip 16000", "Русский — GigaAM v3"),
         ("gigaam-v3", "clip 16000", "Русский — GigaAM v3"),
-        ("parakeet-v3", "parakeet-v3 16000", "Русский и английский — Parakeet v3"),
         (
             "gigaam-multilingual",
             "gigaam-multilingual 16000",
             "Прежняя модель — GigaAM Multilingual",
         ),
-        ("PARAKEET-V3", "parakeet-v3 16000", "Русский и английский — Parakeet v3"),
+        (
+            "GIGAAM-MULTILINGUAL",
+            "gigaam-multilingual 16000",
+            "Прежняя модель — GigaAM Multilingual",
+        ),
     ],
 )
 async def test_each_request_goes_to_its_model(client, model, text, label):
@@ -72,7 +75,7 @@ async def test_unknown_model_is_400(client, engine):
     response = await transcribe(client, "whisper-large")
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "Unknown model 'whisper-large'; enabled models: gigaam-v3, parakeet-v3, "
+        "Unknown model 'whisper-large'; enabled models: gigaam-v3, "
         "gigaam-multilingual, gigaam-multilingual-punct"
     )
     assert engine.calls == []
@@ -83,10 +86,11 @@ async def test_disabled_model_is_400():
     settings = make_settings(models=("gigaam-v3",))
     async with running_app(settings) as (_app, client):
         await wait_ready(client)
-        response = await transcribe(client, "parakeet-v3")
+        response = await transcribe(client, "gigaam-multilingual")
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "Model 'parakeet-v3' is not enabled on this server; enabled models: gigaam-v3"
+        "Model 'gigaam-multilingual' is not enabled on this server; "
+        "enabled models: gigaam-v3"
     )
 
 
@@ -105,47 +109,52 @@ async def test_auth_is_checked_before_the_model():
 async def test_model_still_loading_is_503_with_retry_after():
     """While a non-default model loads, it answers 503 and the default serves."""
     gate = threading.Event()
-    backends = FakeBackends(gates={"parakeet-v3": gate})
+    backends = FakeBackends(gates={"gigaam-multilingual": gate})
     async with running_app(make_settings(), backends) as (app, client):
         await wait_ready(client)
-        loading = await transcribe(client, "parakeet-v3")
+        loading = await transcribe(client, "gigaam-multilingual")
         assert loading.status_code == 503
-        assert loading.json() == {"detail": "Model parakeet-v3 is still loading"}
+        assert loading.json() == {
+            "detail": "Model gigaam-multilingual is still loading"
+        }
         assert loading.headers["retry-after"] == "5"
         assert (await transcribe(client)).status_code == 200
         models = (await client.get("/v1/models", headers=AUTH)).json()["models"]
         statuses = {model["id"]: model["status"] for model in models}
-        assert statuses["parakeet-v3"] == "loading"
+        assert statuses["gigaam-multilingual"] == "loading"
         assert statuses["gigaam-v3"] == "ready"
         gate.set()
         await wait_loaded(app)
-        assert (await transcribe(client, "parakeet-v3")).status_code == 200
+        assert (await transcribe(client, "gigaam-multilingual")).status_code == 200
 
 
 async def test_failed_model_is_503_and_the_others_keep_serving():
     """A model that failed to load answers 503 with the error; health stays ok."""
-    backends = FakeBackends(failures={"parakeet-v3": OSError("disk full")})
+    backends = FakeBackends(failures={"gigaam-multilingual": OSError("disk full")})
     async with running_app(make_settings(), backends) as (app, client):
         await wait_ready(client)
         await wait_loaded(app)
-        failed = await transcribe(client, "parakeet-v3")
+        failed = await transcribe(client, "gigaam-multilingual")
         assert failed.status_code == 503
         assert failed.json() == {
-            "detail": "Model parakeet-v3 failed to load: OSError: disk full"
+            "detail": "Model gigaam-multilingual failed to load: OSError: disk full"
         }
         assert "retry-after" not in failed.headers
-        assert (await transcribe(client, "gigaam-multilingual")).status_code == 200
+        # the model that shares its recogniser fails too
+        punct = await transcribe(client, "gigaam-multilingual-punct")
+        assert punct.status_code == 503
+        assert (await transcribe(client, "gigaam-v3")).status_code == 200
         health = await client.get("/health")
         assert health.status_code == 200
         statuses = {
             m["id"]: (m["status"], m["device"]) for m in health.json()["models"]
         }
-        assert statuses["parakeet-v3"] == ("failed", None)
+        assert statuses["gigaam-multilingual"] == ("failed", None)
         assert "disk full" not in health.text  # errors only behind the API key
         models = (await client.get("/v1/models", headers=AUTH)).json()["models"]
-        parakeet = next(model for model in models if model["id"] == "parakeet-v3")
-        assert parakeet["status"] == "failed"
-        assert parakeet["error"] == "OSError: disk full"
+        failed = next(model for model in models if model["id"] == "gigaam-multilingual")
+        assert failed["status"] == "failed"
+        assert failed["error"] == "OSError: disk full"
 
 
 async def test_failed_punctuator_fails_only_the_punctuated_model():
@@ -168,7 +177,7 @@ async def test_failed_default_model_makes_health_503():
         assert health.status_code == 503
         assert health.json()["status"] == "failed"
         assert (await transcribe(client)).status_code == 503
-        assert (await transcribe(client, "parakeet-v3")).status_code == 200
+        assert (await transcribe(client, "gigaam-multilingual")).status_code == 200
 
 
 async def test_models_endpoint_lists_the_enabled_models(client):
@@ -179,7 +188,6 @@ async def test_models_endpoint_lists_the_enabled_models(client):
     assert body["default"] == "gigaam-v3"
     assert [model["id"] for model in body["models"]] == [
         "gigaam-v3",
-        "parakeet-v3",
         "gigaam-multilingual",
         "gigaam-multilingual-punct",
     ]
@@ -198,8 +206,7 @@ async def test_models_endpoint_lists_the_enabled_models(client):
         "error": None,
     }
     by_id = {model["id"]: model for model in body["models"]}
-    assert by_id["parakeet-v3"]["languages"][:2] == ["ru", "en"]
-    assert len(by_id["parakeet-v3"]["languages"]) == 25
+    assert by_id["gigaam-multilingual"]["languages"] == ["ru", "en", "kk", "ky", "uz"]
     assert by_id["gigaam-multilingual"]["punctuation"] is False
     assert by_id["gigaam-multilingual-punct"]["punctuation"] is True
     for model in body["models"]:
@@ -216,15 +223,18 @@ async def test_models_endpoint_requires_the_api_key(client):
 async def test_models_endpoint_follows_asr_models_order():
     """The list keeps the ASR_MODELS order and marks the configured default."""
     settings = make_settings(
-        models=("parakeet-v3", "gigaam-v3"), default_model="parakeet-v3"
+        models=("gigaam-multilingual", "gigaam-v3"), default_model="gigaam-multilingual"
     )
     async with running_app(settings) as (app, client):
         await wait_loaded(app)
         body = (await client.get("/v1/models", headers=AUTH)).json()
         response = await transcribe(client)
-    assert body["default"] == "parakeet-v3"
-    assert [model["id"] for model in body["models"]] == ["parakeet-v3", "gigaam-v3"]
-    assert response.json()["model_id"] == "parakeet-v3"
+    assert body["default"] == "gigaam-multilingual"
+    assert [model["id"] for model in body["models"]] == [
+        "gigaam-multilingual",
+        "gigaam-v3",
+    ]
+    assert response.json()["model_id"] == "gigaam-multilingual"
 
 
 @pytest.mark.parametrize(
@@ -304,10 +314,10 @@ async def test_each_model_has_its_own_queue():
     """A busy model does not delay requests to another model."""
     gate = threading.Event()
     slow = FakeEngine(gate=gate, text="slow")
-    backends = FakeBackends({"parakeet-v3": slow})
+    backends = FakeBackends({"gigaam-multilingual": slow})
     async with running_app(make_settings(), backends) as (app, client):
         await wait_loaded(app)
-        blocked = asyncio.create_task(transcribe(client, "parakeet-v3"))
+        blocked = asyncio.create_task(transcribe(client, "gigaam-multilingual"))
         await wait_until(slow.entered.is_set)
         quick = await transcribe(client, "gigaam-v3")
         assert quick.status_code == 200

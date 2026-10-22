@@ -103,18 +103,6 @@ def test_gigaam_v3_onnx_is_int8_at_a_pinned_revision(fakes, tmp_path):
     )
 
 
-def test_parakeet_is_fp32(fakes):
-    """Parakeet never uses the int8 encoder: no quantization, fp32 files only."""
-    backend = RECOGNIZERS["parakeet-v3"].cpu
-    build_onnx_engine(backend, threads=2)
-    [(_repo, revision, files, _dir)] = fakes["download"]
-    assert revision == "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce"
-    assert not any("int8" in name for name in files)
-    assert "encoder-model.onnx.data" in files
-    assert fakes["load"][0][0] == "nemo-parakeet-tdt-0.6b-v3"
-    assert fakes["load"][0][2]["quantization"] is None
-
-
 def test_multilingual_onnx_is_int8(fakes):
     """The legacy model on the CPU is the int8 export."""
     build_onnx_engine(RECOGNIZERS["gigaam-multilingual"].cpu, threads=2)

@@ -52,7 +52,7 @@ async def test_gigaam_provider_asks_for_the_model_of_the_room(monkeypatch, fake_
     monkeypatch.setattr(mut, "STT_PROVIDER", "gigaam")
 
     async def room_model() -> str | None:
-        return "parakeet-v3"
+        return "gigaam-multilingual-punct"
 
     engine = mut.create_stt_provider(vad=fake_vad, model_resolver=room_model)
 
@@ -135,13 +135,13 @@ async def test_transcriber_reports_the_model_of_each_final(monkeypatch):
             200,
             json={
                 "text": "hello world",
-                "model_id": "parakeet-v3",
-                "model_label": "Русский и английский — Parakeet v3",
+                "model_id": "gigaam-multilingual-punct",
+                "model_label": "GigaAM Multilingual с пунктуацией",
             },
         )
 
     async def room_model() -> str | None:
-        return "parakeet-v3"
+        return "gigaam-multilingual-punct"
 
     monkeypatch.setattr(
         mut,
@@ -179,12 +179,12 @@ async def test_transcriber_reports_the_model_of_each_final(monkeypatch):
         (
             "hello world",
             {
-                "model": "parakeet-v3",
-                "model_label": "Русский и английский — Parakeet v3",
+                "model": "gigaam-multilingual-punct",
+                "model_label": "GigaAM Multilingual с пунктуацией",
             },
         )
     ]
-    assert requested == ["parakeet-v3"]
+    assert requested == ["gigaam-multilingual-punct"]
 
 
 async def test_report_final_never_raises():

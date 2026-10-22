@@ -457,6 +457,8 @@ def test_uvicorn_process_refuses_to_start_without_api_key():
 
 def test_uvicorn_process_refuses_a_default_model_that_is_not_enabled():
     """A configuration error is fatal at startup with a clear message."""
-    result = _run_factory({"ASR_API_KEY": "secret", "ASR_MODELS": "parakeet-v3"})
+    result = _run_factory(
+        {"ASR_API_KEY": "secret", "ASR_MODELS": "gigaam-multilingual"}
+    )
     assert result.returncode == 1
     assert "ASR_DEFAULT_MODEL=gigaam-v3 is not enabled in ASR_MODELS" in result.stderr

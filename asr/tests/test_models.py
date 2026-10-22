@@ -1,8 +1,10 @@
 """Tests of the model manager: placement, load order, CPU fallback, statuses."""
 
+import dataclasses
 import logging
 
 from asr_service.engine import GpuLoadError
+from asr_service.registry import MODELS, RECOGNIZERS, ModelSpec, Recognizer
 
 from .conftest import (
     AUTH,
@@ -24,13 +26,11 @@ async def test_gpu_models_load_on_the_gpu_and_the_rest_on_cpu():
         health = (await client.get("/health")).json()
     assert backends.loaded == [
         ("gigaam-v3", "cuda:0"),
-        ("parakeet-v3", "cpu"),
         ("gigaam-multilingual", "cpu"),
         ("xlmr-pcs", "cpu"),
     ]
     assert {m["id"]: m["device"] for m in models} == {
         "gigaam-v3": "cuda",
-        "parakeet-v3": "cpu",
         "gigaam-multilingual": "cpu",
         "gigaam-multilingual-punct": "cpu",
     }
@@ -141,11 +141,29 @@ async def test_cpu_device_does_not_probe_the_gpu():
     assert {device for _key, device in backends.loaded} == {"cpu"}
 
 
-async def test_cuda_without_gpu_capable_models_does_not_probe_the_gpu(caplog):
+async def test_cuda_without_gpu_capable_models_does_not_probe_the_gpu(
+    caplog, monkeypatch
+):
     """Without a model that has a GPU backend, no CUDA context is created."""
+    # Every model of the registry can use the GPU: register a CPU-only one
+    cpu = dataclasses.replace(RECOGNIZERS["gigaam-v3"].cpu, variant="cpu-only")
+    cpu_only = Recognizer(key="cpu-only", cpu=cpu)
+    monkeypatch.setitem(RECOGNIZERS, "cpu-only", cpu_only)
+    monkeypatch.setitem(
+        MODELS,
+        "cpu-only",
+        ModelSpec(
+            id="cpu-only",
+            label="CPU only",
+            description="",
+            languages=("ru",),
+            punctuation=False,
+            recognizer="cpu-only",
+        ),
+    )
     backends = FakeBackends(gpu=fake_gpu())
     settings = make_settings(
-        device="cuda", models=("parakeet-v3",), default_model="parakeet-v3"
+        device="cuda", models=("cpu-only",), default_model="cpu-only"
     )
     with caplog.at_level(logging.INFO, logger="asr_service"):
         async with running_app(settings, backends) as (app, client):
@@ -153,7 +171,7 @@ async def test_cuda_without_gpu_capable_models_does_not_probe_the_gpu(caplog):
             assert (await client.get("/health")).status_code == 200
     assert backends.probes == 0
     assert backends.limits == []
-    assert backends.loaded == [("parakeet-v3", "cpu")]
+    assert backends.loaded == [("cpu-only", "cpu")]
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
@@ -167,7 +185,6 @@ async def test_default_model_loads_first():
         ("gigaam-multilingual", "cuda:0"),
         ("xlmr-pcs", "cpu"),
         ("gigaam-v3", "cpu"),
-        ("parakeet-v3", "cpu"),
     ]
 
 

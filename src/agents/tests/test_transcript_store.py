@@ -481,7 +481,7 @@ async def test_resume_reads_every_page(page_size):
 
 
 V3 = ("gigaam-v3", "Русский — GigaAM v3")
-PARAKEET = ("parakeet-v3", "Русский и английский — Parakeet v3")
+MULTILINGUAL_PUNCT = ("gigaam-multilingual-punct", "GigaAM Multilingual с пунктуацией")
 
 
 async def test_recognition_models_in_the_final_files_and_hook(fake_s3):
@@ -491,7 +491,7 @@ async def test_recognition_models_in_the_final_files_and_hook(fake_s3):
     await store.open()
     for start, (model, label), text in [
         (T0 + 9, V3, "три"),
-        (T0 + 1, PARAKEET, "раз"),
+        (T0 + 1, MULTILINGUAL_PUNCT, "раз"),
         (T0 + 5, V3, "два"),
         (T0 + 12, (None, None), "без модели"),
     ]:
@@ -509,11 +509,14 @@ async def test_recognition_models_in_the_final_files_and_hook(fake_s3):
 
     document = fake_s3.json(f"transcriptions/{TID}/transcript.json")
     assert document["models"] == [
-        {"id": "parakeet-v3", "label": "Русский и английский — Parakeet v3"},
+        {
+            "id": "gigaam-multilingual-punct",
+            "label": "GigaAM Multilingual с пунктуацией",
+        },
         {"id": "gigaam-v3", "label": "Русский — GigaAM v3"},
     ]
     assert [(s["text"], s.get("model")) for s in document["segments"]] == [
-        ("раз", "parakeet-v3"),
+        ("раз", "gigaam-multilingual-punct"),
         ("два", "gigaam-v3"),
         ("три", "gigaam-v3"),
         ("без модели", None),
@@ -525,12 +528,12 @@ async def test_recognition_models_in_the_final_files_and_hook(fake_s3):
         "- Дата: 19.10.2026, 13:00–13:00 (Europe/Moscow)",
         "- Участники: Иван",
         (
-            "- Модель распознавания: Русский и английский — Parakeet v3, "
+            "- Модель распознавания: GigaAM Multilingual с пунктуацией, "
             "Русский — GigaAM v3"
         ),
     ]
     (payload,) = hook.payloads
-    assert payload["models"] == ["parakeet-v3", "gigaam-v3"]
+    assert payload["models"] == ["gigaam-multilingual-punct", "gigaam-v3"]
 
 
 async def test_model_labels_survive_a_restart(fake_s3):
@@ -571,7 +574,7 @@ def test_label_is_not_part_of_the_segment_identity():
     """The same phrase read with and without its label is one segment."""
     with_label = Segment("u1", "Иван", 1000, 2000, "раз", "gigaam-v3", "GigaAM v3")
     without_label = Segment("u1", "Иван", 1000, 2000, "раз", "gigaam-v3")
-    other_model = Segment("u1", "Иван", 1000, 2000, "раз", "parakeet-v3")
+    other_model = Segment("u1", "Иван", 1000, 2000, "раз", "gigaam-multilingual-punct")
 
     assert merge_segments([with_label, without_label]) == [with_label]
     assert len(merge_segments([with_label, other_model])) == 2
@@ -586,7 +589,9 @@ def test_list_models_takes_the_first_known_label():
     """Distinct models in order of first phrase; a later label fills a gap."""
     segments = [
         Segment("u1", "a", 1, 2, "раз", "gigaam-v3"),
-        Segment("u2", "b", 2, 3, "два", "parakeet-v3", "Parakeet v3"),
+        Segment(
+            "u2", "b", 2, 3, "два", "gigaam-multilingual-punct", "GigaAM Multilingual"
+        ),
         Segment("u1", "a", 3, 4, "три", "gigaam-v3", "GigaAM v3"),
         Segment("u1", "a", 4, 5, "четыре", "gigaam-v3", "другое"),
         Segment("u1", "a", 5, 6, "пять"),
@@ -594,7 +599,7 @@ def test_list_models_takes_the_first_known_label():
 
     assert list_models(segments) == [
         {"id": "gigaam-v3", "label": "GigaAM v3"},
-        {"id": "parakeet-v3", "label": "Parakeet v3"},
+        {"id": "gigaam-multilingual-punct", "label": "GigaAM Multilingual"},
     ]
     assert list_models([]) == []
 

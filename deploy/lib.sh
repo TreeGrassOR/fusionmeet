@@ -67,6 +67,58 @@ env_set() {
   mv -f "$tmp" "$file"
 }
 
+# fm_load_hosts FILE: the public names of FusionMeet from a dotenv FILE
+# (deploy/.env), with the defaults of compose.yaml: an empty MEET_HOST,
+# KEYCLOAK_HOST or LIVEKIT_HOST means meet., id. or livekit.<BASE_DOMAIN>. Sets
+# FM_MEET_HOST, FM_REDIRECT_HOSTS (array, MEET_REDIRECT_HOSTS is space separated),
+# FM_KEYCLOAK_HOST, FM_LIVEKIT_HOST and FM_HOSTS (all of them, MEET_HOST first).
+fm_load_hosts() {
+  local file=$1 base
+  base=$(env_get "$file" BASE_DOMAIN)
+  FM_MEET_HOST=$(env_get "$file" MEET_HOST)
+  FM_MEET_HOST=${FM_MEET_HOST:-meet.$base}
+  FM_KEYCLOAK_HOST=$(env_get "$file" KEYCLOAK_HOST)
+  FM_KEYCLOAK_HOST=${FM_KEYCLOAK_HOST:-id.$base}
+  FM_LIVEKIT_HOST=$(env_get "$file" LIVEKIT_HOST)
+  FM_LIVEKIT_HOST=${FM_LIVEKIT_HOST:-livekit.$base}
+  read -r -a FM_REDIRECT_HOSTS <<<"$(env_get "$file" MEET_REDIRECT_HOSTS)"
+  # shellcheck disable=SC2034  # read by the scripts that source lib.sh
+  FM_HOSTS=("$FM_MEET_HOST" "${FM_REDIRECT_HOSTS[@]}" "$FM_KEYCLOAK_HOST" "$FM_LIVEKIT_HOST")
+}
+
+# fm_check_hosts: dies unless every name of fm_load_hosts is a plain lower-case
+# host name (no scheme, path or "$" reference) and no name is used twice (Caddy
+# refuses a duplicate site address, nginx would get conflicting server blocks).
+fm_check_hosts() {
+  # ASCII ranges in the patterns below whatever the locale of the server
+  local LC_ALL=C
+  local item key host seen=' ' items=("MEET_HOST=$FM_MEET_HOST")
+  for host in "${FM_REDIRECT_HOSTS[@]}"; do items+=("MEET_REDIRECT_HOSTS=$host"); done
+  items+=("KEYCLOAK_HOST=$FM_KEYCLOAK_HOST" "LIVEKIT_HOST=$FM_LIVEKIT_HOST")
+  for item in "${items[@]}"; do
+    key=${item%%=*}
+    host=${item#*=}
+    case $host in
+      *'$'*) die "$key=$host в $FM_ENV_FILE: впишите имя целиком, ссылки на другие переменные (\$...) здесь не работают" ;;
+      *://* | */*) die "$key=$host в $FM_ENV_FILE: укажите только имя, без https:// и пути (например med-question.online)" ;;
+      *,*) die "$key=$host в $FM_ENV_FILE: имена разделяются пробелами, не запятыми" ;;
+      *[A-Z]*) die "$key=$host в $FM_ENV_FILE: имя пишется строчными буквами" ;;
+    esac
+    if ((${#host} > 253)) ||
+      [[ ! $host =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+      die "$key=$host в $FM_ENV_FILE не похоже на доменное имя (например med-question.online; кириллический домен — в punycode, xn--...)"
+    fi
+    [[ $seen != *" $host "* ]] ||
+      die "имя $host указано в $FM_ENV_FILE дважды (MEET_HOST, MEET_REDIRECT_HOSTS, KEYCLOAK_HOST, LIVEKIT_HOST): у каждого адреса своё имя"
+    seen+="$host "
+  done
+}
+
+# fm_resolve HOST: the first IPv4 address of HOST in the server's DNS, if any.
+fm_resolve() {
+  getent ahostsv4 "$1" 2>/dev/null | awk 'NR == 1 { print $1 }' || true
+}
+
 # fm_compose ARGS...: docker compose on deploy/compose.yaml with deploy/.env
 fm_compose() {
   docker compose -f "$FM_COMPOSE_FILE" --env-file "$FM_ENV_FILE" "$@"

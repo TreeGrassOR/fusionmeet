@@ -78,7 +78,7 @@ fi
 
 status=$(printf '%s\n' "$result" | sed -n 's/^status=//p')
 user_email=$(printf '%s\n' "$result" | sed -n 's/^email=//p')
-base_domain=$(env_get "$FM_ENV_FILE" BASE_DOMAIN)
+fm_load_hosts "$FM_ENV_FILE"
 
 echo
 if [[ $status == exists ]]; then
@@ -88,7 +88,7 @@ else
 fi
 cat <<EOF
 
-  Адрес:             https://meet.$base_domain/
+  Адрес:             https://$FM_MEET_HOST/
   Логин:             $login
   Email:             ${user_email:-$email}
   Временный пароль:  $password

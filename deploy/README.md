@@ -1,17 +1,22 @@
 # Развёртывание FusionMeet на одном сервере
 
-Весь сервис (видеозвонки, запись, расшифровка речи на GigaAM и Parakeet) работает на одном
+Весь сервис (видеозвонки, запись, расшифровка речи на GigaAM) работает на одном
 Linux-сервере с одной видеокартой NVIDIA через `docker compose`. Стек запускается
 как отдельный проект compose `fusionmeet`: его контейнеры, тома и сеть называются
 `fusionmeet-…` и не пересекаются с другими контейнерами на сервере (например, с vLLM).
 
-Адреса строятся из `BASE_DOMAIN` (по умолчанию `94-29-40-2.sslip.io`):
+Адреса задаются в `deploy/.env` (раздел «Свой домен»):
 
-| Адрес | Что это |
-|---|---|
-| `https://meet.<BASE_DOMAIN>/` | интерфейс видеозвонков |
-| `https://id.<BASE_DOMAIN>/` | Keycloak: вход, учётные записи, админка `/admin/` |
-| `wss://livekit.<BASE_DOMAIN>/` | сигнальный сервер LiveKit |
+| Переменная | Адрес | Что это |
+|---|---|---|
+| `MEET_HOST` | `https://med-question.online/` | интерфейс видеозвонков |
+| `MEET_REDIRECT_HOSTS` | `www.med-question.online`, `meet.94-29-40-2.sslip.io` | другие имена сайта: перенаправляют на `MEET_HOST` |
+| `KEYCLOAK_HOST` | `https://id.med-question.online/` | Keycloak: вход, учётные записи, админка `/admin/` |
+| `LIVEKIT_HOST` | `wss://livekit.med-question.online/` | сигнальный сервер LiveKit |
+
+Пустые `MEET_HOST`, `KEYCLOAK_HOST` и `LIVEKIT_HOST` означают `meet.`, `id.` и
+`livekit.<BASE_DOMAIN>`. С `BASE_DOMAIN=94-29-40-2.sslip.io` такие имена работают без
+настройки DNS.
 
 ## Быстрый старт
 
@@ -22,14 +27,15 @@ sudo ./deploy/up.sh                           # спросит email для Let'
 sudo ./deploy/add-user.sh ivan ivan@example.ru # пользователь и временный пароль
 ```
 
-Откройте `https://meet.<BASE_DOMAIN>/` и войдите. При первом входе Keycloak попросит
-сменить временный пароль и указать имя и фамилию: их видят участники звонка.
+Откройте `https://<MEET_HOST>/` (https://med-question.online/) и войдите. При первом
+входе Keycloak попросит сменить временный пароль и указать имя и фамилию: их видят
+участники звонка.
 
 ## Что запускается
 
 | Сервис | Образ | Назначение |
 |---|---|---|
-| `caddy` | `caddy:2.11.7` | HTTPS для трёх адресов, сертификаты Let's Encrypt (HTTP-01) |
+| `caddy` | `caddy:2.11.7` | HTTPS для сайта, Keycloak и LiveKit, перенаправление других имён сайта, сертификаты Let's Encrypt (HTTP-01) |
 | `frontend` | `fusionmeet/frontend:local`, собирается из репозитория | интерфейс (nginx) и маршрутизация `/api`, `/admin`, `/static`, `/media/recordings/` |
 | `backend` | `fusionmeet/backend:local`, собирается из репозитория | Django API |
 | `backend-migrate` | `fusionmeet/backend:local` (образ `backend`) | разовый запуск миграций базы перед `backend` |
@@ -59,11 +65,11 @@ Docker Hub, а Garage уже используется в dev-стеке upstream
 | Порт | Кто слушает | Проброс на роутере | Зачем |
 |---|---|---|---|
 | 80/tcp | Caddy | да | выпуск сертификатов Let's Encrypt (HTTP-01), переадресация на HTTPS |
-| 443/tcp | Caddy | да | HTTPS для meet, id и livekit (WebSocket) |
+| 443/tcp | Caddy | да | HTTPS для сайта, Keycloak и LiveKit (WebSocket) |
 | 443/udp | Caddy | да | HTTP/3 (без него всё работает по 443/tcp) |
 | 7881/tcp | LiveKit | да | медиа по TCP, если UDP недоступен |
 | 7882/udp | LiveKit | да | весь медиатрафик (аудио, видео, экран) по UDP |
-| 7880/tcp | LiveKit | **нет** | API и WebSocket LiveKit; снаружи доступен только через Caddy (`livekit.<BASE_DOMAIN>`) |
+| 7880/tcp | LiveKit | **нет** | API и WebSocket LiveKit; снаружи доступен только через Caddy (`LIVEKIT_HOST`) |
 | 127.0.0.1:16379/tcp | Redis | нет | только для LiveKit в сети хоста (`REDIS_HOST_PORT`) |
 
 Про порты LiveKit из upstream-конфигурации:
@@ -90,30 +96,85 @@ sudo ufw allow 7882/udp
 sudo ufw allow from 172.16.0.0/12 to any port 7880 proto tcp   # Caddy, egress и агенты -> LiveKit
 ```
 
+Смена домена не влияет на медиа: аудио, видео и демонстрация экрана идут напрямую на
+`PUBLIC_IP` (или `LAN_IP`) через 7881/tcp и 7882/udp, а не через Caddy или DNS. Эти
+порты должны оставаться проброшенными на `LAN_IP`.
+
+## Свой домен
+
+Сайт работает на `med-question.online`. У регистратора домена (reg.ru) нужны
+A-записи на `PUBLIC_IP`:
+
+| Имя | Тип | Значение | Для чего |
+|---|---|---|---|
+| `@` (`med-question.online`) | A | `94.29.40.2` | сайт (`MEET_HOST`) |
+| `www` | A | `94.29.40.2` | перенаправление на сайт (`MEET_REDIRECT_HOSTS`) |
+| `id` | A | `94.29.40.2` | Keycloak (`KEYCLOAK_HOST`) |
+| `livekit` | A | `94.29.40.2` | LiveKit (`LIVEKIT_HOST`) |
+
+Одна запись `*` (wildcard) с тем же адресом заменяет `www`, `id` и `livekit`. Записи
+AAAA (IPv6) не нужны; если они есть, они должны вести на этот же сервер, иначе Let's
+Encrypt не выпустит сертификат.
+
+`up.sh` перед запуском проверяет каждое имя в DNS:
+
+- имя из `MEET_HOST`, `KEYCLOAK_HOST` или `LIVEKIT_HOST` не найдено: `up.sh`
+  останавливается и пишет, какую A-запись добавить. Без неё Caddy не получит
+  сертификат, а неудачные попытки расходуют лимит Let's Encrypt (5 неудачных проверок
+  одного имени в час);
+- имя из `MEET_REDIRECT_HOSTS` не найдено: предупреждение, в этот раз имя пропускается;
+- имя указывает не на `PUBLIC_IP` и не на `LAN_IP`: предупреждение.
+
+Новую запись DNS-серверы видят не сразу: если имя уже спрашивали до её появления,
+ответ «такого имени нет» хранится до 30 минут. Если `up.sh` пишет, что имя не
+найдено, хотя запись уже есть, подождите и запустите его снова. Проверка на сервере:
+`getent hosts id.med-question.online`.
+
+**Переход с адресов `*.94-29-40-2.sslip.io`:**
+
+1. `git pull && sudo ./deploy/up.sh`. `up.sh` сам допишет в `deploy/.env`
+   `MEET_HOST`, `MEET_REDIRECT_HOSTS`, `KEYCLOAK_HOST` и `LIVEKIT_HOST`. Caddy получит
+   сертификаты на новые имена, nginx сервера (если FusionMeet за ним) начнёт
+   пересылать их, Keycloak получит новые адреса возврата после входа.
+2. Пользователи один раз входят заново: у сайта и Keycloak новые адреса. Учётные
+   записи, комнаты, записи и расшифровки сохраняются.
+3. Прежний адрес `meet.94-29-40-2.sslip.io` остаётся в `MEET_REDIRECT_HOSTS`: старые
+   ссылки на комнаты и ссылки из писем перенаправляются на новый адрес.
+
+**Другой домен:** поменяйте эти четыре переменные в `deploy/.env`, добавьте A-записи
+и запустите `sudo ./deploy/up.sh`. Имя пишется без `https://` и пути, строчными
+буквами (кириллический домен — в punycode, `xn--…`); `MEET_REDIRECT_HOSTS` — через
+пробел, в кавычках. Ссылки на другие переменные (`${...}`) в этих значениях не
+работают.
+
 ## Домашняя сеть: NAT loopback
 
-Имена `*.94-29-40-2.sslip.io` указывают на внешний IP. Устройство внутри
-домашней сети обращается к внешнему IP своего же роутера, и это работает, только если
-роутер умеет NAT loopback (hairpin NAT). Многие домашние роутеры не умеют.
+Имена сервиса указывают на внешний IP. Устройство внутри домашней сети обращается
+к внешнему IP своего же роутера, и это работает, только если роутер умеет NAT
+loopback (hairpin NAT). Многие домашние роутеры не умеют.
 
 - **Медиа.** LiveKit сообщает клиентам два адреса: внешний `PUBLIC_IP` и
   внутренний `LAN_IP` сервера. Устройства в домашней сети соединяются с `LAN_IP`
   напрямую, NAT loopback для медиа не нужен.
 - **Сайт (HTTPS и WebSocket).** Без NAT loopback браузер в домашней сети не откроет
-  `https://meet.<BASE_DOMAIN>/`. Нужна одна из мер:
-  - локальный DNS на роутере (dnsmasq, OpenWrt, Keenetic, Pi-hole): все имена
-    `*.94-29-40-2.sslip.io` → `LAN_IP`. Для dnsmasq:
-    `address=/94-29-40-2.sslip.io/192.168.1.14`;
-  - или на каждом компьютере строки в hosts (`/etc/hosts`,
+  `https://med-question.online/`. Нужна одна из мер:
+  - локальный DNS на роутере (dnsmasq, OpenWrt, Keenetic, Pi-hole): имена сервиса →
+    `LAN_IP`. Для dnsmasq (домен со всеми поддоменами и прежний адрес):
+    ```
+    address=/med-question.online/192.168.1.14
+    address=/94-29-40-2.sslip.io/192.168.1.14
+    ```
+  - или на каждом компьютере строка в hosts (`/etc/hosts`,
     `C:\Windows\System32\drivers\etc\hosts`):
     ```
-    192.168.1.14 meet.94-29-40-2.sslip.io id.94-29-40-2.sslip.io livekit.94-29-40-2.sslip.io
+    192.168.1.14 med-question.online www.med-question.online id.med-question.online livekit.med-question.online
     ```
   - или включить NAT loopback на роутере, если он это умеет.
 
   Сертификат Let's Encrypt подходит и при обращении по `LAN_IP`, потому что имя то же.
-- **Сами контейнеры на сервере** от этого не зависят: внутри сети compose эти три
-  имени указывают прямо на Caddy, а LiveKit отправляет вебхуки через 127.0.0.1.
+- **Сами контейнеры на сервере** от этого не зависят: внутри сети compose имена
+  сайта, Keycloak и LiveKit указывают прямо на Caddy, а LiveKit отправляет вебхуки
+  через 127.0.0.1.
 
 Закрепите за сервером постоянный адрес в DHCP роутера. Если `LAN_IP` всё же
 изменился, исправьте его в `deploy/.env` (или очистите значение, и `up.sh`
@@ -147,13 +208,12 @@ sudo ufw allow from 172.16.0.0/12 to any port 7880 proto tcp   # Caddy, egress �
 | id | Название на сайте | Для чего | Где работает | Память |
 |---|---|---|---|---|
 | `gigaam-v3` (по умолчанию) | «Русский — GigaAM v3» | лучшее качество для русской речи, знаки препинания и заглавные буквы; английскую речь не распознаёт | GPU, если хватает видеопамяти, иначе CPU | GPU: ~1,5 ГБ видеопамяти; CPU: ~0,5 ГБ ОЗУ |
-| `parakeet-v3` | «Русский и английский — Parakeet v3» | встречи на английском или на двух языках: 25 языков, язык определяется сам, со знаками препинания; русский немного хуже, чем у GigaAM v3 | только CPU | ~2,7 ГБ ОЗУ |
 | `gigaam-multilingual` | «Прежняя модель — GigaAM Multilingual» | модель, которая работала до обновления: строчные буквы без знаков препинания | CPU; на GPU ей нужно ~3 ГБ, и с настройками по умолчанию она туда не помещается вместе с `gigaam-v3` | CPU: ~1,1 ГБ ОЗУ |
 | `gigaam-multilingual-punct` | «GigaAM Multilingual с пунктуацией» | та же прежняя модель и отдельная модель, которая расставляет знаки препинания и заглавные буквы | там же, где `gigaam-multilingual` (вторая копия не загружается); пунктуация — на CPU | ещё ~1,3 ГБ ОЗУ (1,8 ГБ во время загрузки) |
 
 Всё настраивается в `deploy/.env` (описание переменных — в `deploy/.env.example`):
 
-- `ASR_MODELS` — включённые модели через запятую (по умолчанию все четыре).
+- `ASR_MODELS` — включённые модели через запятую (по умолчанию все три).
 - `ASR_DEFAULT_MODEL` — модель встреч, где модель не выбрана (по умолчанию
   `gigaam-v3`). Она должна входить в `ASR_MODELS`, иначе asr не запустится.
 - `ASR_CPU_THREADS` — сколько потоков CPU занимает каждая модель на CPU (пусто —
@@ -166,8 +226,8 @@ sudo ufw allow from 172.16.0.0/12 to any port 7880 proto tcp   # Caddy, egress �
   работает. `ASR_VRAM_GB_GIGAAM_V3` и `ASR_VRAM_GB_GIGAAM_MULTILINGUAL` — сколько
   видеопамяти считать нужным этим моделям (оценки 1,5 и 3 ГБ).
 - `ASR_DEVICE` — `cuda` (по умолчанию: GPU для тех, кто на неё помещается) или
-  `cpu` (всё на процессоре, видеокарта не используется; всем четырём моделям нужно
-  около 6,5 ГБ ОЗУ).
+  `cpu` (всё на процессоре, видеокарта не используется; всем трём моделям нужно
+  около 3,5 ГБ ОЗУ).
 
 После изменения: `sudo docker compose -f deploy/compose.yaml up -d asr`. Пока asr
 перезапускается и загружает модель по умолчанию, речь не распознаётся, поэтому
@@ -178,13 +238,12 @@ sudo ufw allow from 172.16.0.0/12 to any port 7880 proto tcp   # Caddy, egress �
 Она пропадёт из списка на сайте, а встречи, где она была выбрана, будут
 распознаваться моделью по умолчанию.
 
-**Память.** Все четыре модели на CPU занимают около 6 ГБ оперативной памяти.
+**Память.** Все три модели на CPU занимают около 3,5 ГБ оперативной памяти.
 `install.sh` предупреждает, если доступно меньше, чем нужно включённым моделям,
-плюс 2 ГБ запаса (для всех четырёх — около 8 ГБ). Если памяти мало, уберите лишние
-модели: больше всего занимают `parakeet-v3` (~2,7 ГБ) и пунктуация
-`gigaam-multilingual-punct` (~1,8 ГБ).
+плюс 2 ГБ запаса (для всех трёх — около 5,5 ГБ). Если памяти мало, уберите лишние
+модели: больше всего занимает пунктуация `gigaam-multilingual-punct` (~1,8 ГБ).
 
-**Первый запуск** скачивает около 5 ГБ весов в том `fusionmeet_asr-models`. asr
+**Первый запуск** скачивает около 2,5 ГБ весов в том `fusionmeet_asr-models`. asr
 проходит healthcheck, как только готова модель по умолчанию; остальные загружаются
 следом и до этого отмечены на сайте «загружается». Модель, которая не загрузилась,
 отмечена «недоступна», остальные работают. Состояние моделей:
@@ -196,7 +255,10 @@ sudo docker compose -f deploy/compose.yaml exec asr python -c "import urllib.req
 Переменные прежней версии `ASR_MODEL_ID`, `ASR_MODEL_REVISION`, `ASR_MODEL_VARIANT`,
 `ASR_MODEL_VRAM_GB`, `ASR_FALLBACK_REVISION`, `ASR_FALLBACK_VARIANT` и
 `ASR_FALLBACK_VRAM_GB` больше не используются, их можно удалить из `deploy/.env`.
-Новые переменные `up.sh` допишет в `deploy/.env` сам.
+Новые переменные `up.sh` допишет в `deploy/.env` сам. Модель `parakeet-v3` удалена:
+`up.sh` убирает её из `ASR_MODELS` и `ASR_DEFAULT_MODEL`, а после запуска удаляет её
+веса из тома `fusionmeet_asr-models` (около 2,5 ГБ). Встречи, где она была выбрана,
+распознаются моделью по умолчанию.
 
 ## Скрипты
 
@@ -208,7 +270,7 @@ sudo docker compose -f deploy/compose.yaml exec asr python -c "import urllib.req
 | `sudo ./deploy/add-user.sh <логин> <email>` | создаёт пользователя и печатает временный пароль; для существующего пользователя задаёт новый временный пароль |
 
 Первый `up.sh` идёт долго: сборка четырёх образов, первая сборка Keycloak и
-загрузка весов моделей распознавания (около 5 ГБ) в том `fusionmeet_asr-models`. По умолчанию
+загрузка весов моделей распознавания (около 2,5 ГБ) в том `fusionmeet_asr-models`. По умолчанию
 `up.sh` ждёт healthcheck до 60 минут (`sudo UP_WAIT_TIMEOUT=7200 ./deploy/up.sh`, чтобы
 ждать дольше). Ход загрузки моделей: `sudo docker compose -f deploy/compose.yaml logs -f asr`.
 
@@ -307,9 +369,15 @@ asr отключает эту проверку (`NVIDIA_DISABLE_REQUIRE=true` в
 - Caddy слушает только `127.0.0.1:18080` и `127.0.0.1:18443`
   (`CADDY_LOCAL_HTTP_PORT`, `CADDY_LOCAL_HTTPS_PORT`).
 - `up.sh` кладёт в nginx файл `fusionmeet.conf` (в `conf.d` или `sites-available`).
-  Файл пересылает в Caddy только `meet.`, `id.` и `livekit.<BASE_DOMAIN>`, остальные
-  сайты nginx не меняются. Перед перезагрузкой nginx файл проверяется `nginx -t`, при
-  ошибке прежние настройки восстанавливаются.
+  Файл пересылает в Caddy только имена FusionMeet (`MEET_HOST`, `MEET_REDIRECT_HOSTS`,
+  `KEYCLOAK_HOST`, `LIVEKIT_HOST`), остальные сайты nginx не меняются. Перед
+  перезагрузкой nginx файл проверяется `nginx -t`, при ошибке прежние настройки
+  восстанавливаются.
+- Если одно из этих имён уже есть в `server_name` другого сайта nginx, `up.sh`
+  останавливается и называет файл: nginx отдал бы имя первому сайту, а FusionMeet
+  молча остался бы без него. Уберите имя оттуда и запустите `up.sh` снова.
+- HTTPS включается для каждого имени, как только Caddy получил на него сертификат;
+  имена, у которых сертификат уже есть, работают и во время перехода на новые.
 - Сертификаты Let's Encrypt получает и продлевает Caddy (HTTP-01 через порт 80 nginx).
   nginx берёт их из тома Caddy и перечитывает раз в сутки
   (`fusionmeet-nginx-reload.timer`).
@@ -317,18 +385,21 @@ asr отключает эту проверку (`NVIDIA_DISABLE_REQUIRE=true` в
 
 ### Сменился внешний IP
 
-1. В `deploy/.env` поменяйте `BASE_DOMAIN` (IP через дефисы, например
-   `94-29-40-2.sslip.io`), `PUBLIC_IP` и, если изменился, `LAN_IP`.
-2. На роутере пробросьте на `LAN_IP` порты 80/tcp, 443/tcp, 7881/tcp и 7882/udp.
-3. `sudo ./deploy/up.sh`: Caddy получит сертификаты на новые имена, nginx сервера
+1. В `deploy/.env` поменяйте `PUBLIC_IP` и, если изменился, `LAN_IP`.
+2. Свой домен: у регистратора поменяйте A-записи на новый IP (раздел «Свой домен»).
+   Имена sslip.io содержат сам IP: поменяйте `BASE_DOMAIN` (IP через дефисы, например
+   `94-29-40-2.sslip.io`), если какое-то из `MEET_HOST`, `KEYCLOAK_HOST`,
+   `LIVEKIT_HOST` пустое, и имена sslip.io в `MEET_REDIRECT_HOSTS`.
+3. На роутере пробросьте на `LAN_IP` порты 80/tcp, 443/tcp, 7881/tcp и 7882/udp.
+4. `sudo ./deploy/up.sh`: Caddy получит сертификаты на новые имена, nginx сервера
    (если FusionMeet за ним) получит новые имена, а Keycloak — новые адреса возврата
    после входа. Учётные записи, комнаты, записи и расшифровки сохраняются.
 
 ### Сертификаты не выпускаются
 
 - Журнал: `sudo docker compose -f deploy/compose.yaml logs caddy | grep -i -E 'error|acme'`.
-- Порты 80/tcp и 443/tcp должны быть проброшены на сервер, а `meet.<BASE_DOMAIN>`
-  должен указывать на `PUBLIC_IP` (`getent hosts meet.<BASE_DOMAIN>`).
+- Порты 80/tcp и 443/tcp должны быть проброшены на сервер, а каждое имя (раздел
+  «Свой домен») должно указывать на `PUBLIC_IP` (`getent hosts med-question.online`).
 - После нескольких неудачных попыток Let's Encrypt временно ограничивает выпуск
   (около часа). Для экспериментов можно указать в `deploy/.env` тестовый
   `ACME_CA` (см. комментарий там), но с ним сайт не работает: верните рабочий адрес,
@@ -340,16 +411,20 @@ asr отключает эту проверку (`NVIDIA_DISABLE_REQUIRE=true` в
 - Проверьте проброс 7881/tcp и 7882/udp на `LAN_IP` сервера и правила `ufw` (выше).
 - Из домашней сети: нужен локальный DNS или NAT loopback (раздел выше).
 - Журнал: `sudo docker compose -f deploy/compose.yaml logs livekit`.
-- LiveKit советует увеличить UDP-буферы ядра:
-  `sudo sysctl -w net.core.rmem_max=16777216 net.core.wmem_max=16777216`
-  (для постоянства — файл в `/etc/sysctl.d/`).
+- UDP-буферы ядра для LiveKit (`net.core.rmem_max` и `net.core.wmem_max` = 16 МБ)
+  `up.sh` задаёт сам и сохраняет в `/etc/sysctl.d/90-fusionmeet-livekit.conf`;
+  большие значения он не уменьшает. Если значения изменились, `up.sh` перезапускает
+  LiveKit. Проверка: `sysctl net.core.rmem_max` и
+  `sudo docker compose -f deploy/compose.yaml logs livekit | grep -i buffer`.
 
 ### Вход через Keycloak
 
 - Realm `meet` (`deploy/keycloak/meet-realm.json`) импортируется **только при первом
   запуске**. Последующие правки файла не применяются: меняйте настройки в админке
-  `https://id.<BASE_DOMAIN>/admin/` (логин `admin`, пароль `KEYCLOAK_ADMIN_PASSWORD`
-  из `deploy/.env`).
+  `https://<KEYCLOAK_HOST>/admin/` (https://id.med-question.online/admin/, логин
+  `admin`, пароль `KEYCLOAK_ADMIN_PASSWORD` из `deploy/.env`). Адреса возврата после
+  входа (`MEET_HOST`), регистрацию (`KEYCLOAK_REGISTRATION_ALLOWED`) и название
+  (`APP_TITLE`) `up.sh` переносит в Keycloak сам при каждом запуске.
 - `KEYCLOAK_ADMIN_PASSWORD` задаёт пароль администратора тоже только при первом
   запуске. Если сменить пароль в админке, обновите его и в `deploy/.env`, иначе
   `add-user.sh` не сможет войти.

@@ -21,9 +21,9 @@ ASR_MODELS_PAYLOAD = {
             "error": None,
         },
         {
-            "id": "parakeet-v3",
-            "label": "Русский и английский — Parakeet v3",
-            "description": "Для встреч на английском или на двух языках.",
+            "id": "gigaam-multilingual-punct",
+            "label": "GigaAM Multilingual с пунктуацией",
+            "description": "Прежняя модель; пунктуацию расставляет отдельная модель.",
             "languages": ["ru", "en"],
             "punctuation": True,
             "device": "cpu",
