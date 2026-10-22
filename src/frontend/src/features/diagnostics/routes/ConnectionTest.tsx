@@ -50,7 +50,10 @@ const helpClass = css({
   gap: '0.5rem',
   width: '100%',
   borderRadius: 8,
-  border: '1px solid {colors.border}',
+  border: {
+    base: '1px solid {colors.greyscale.200}',
+    _dark: '1px solid {colors.border}',
+  },
   backgroundColor: 'surface.raised',
   padding: '0.75rem 1rem',
   textStyle: 'sm',

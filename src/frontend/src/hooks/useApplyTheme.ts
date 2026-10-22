@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSnapshot } from 'valtio'
+import { useLocation } from 'wouter'
 import { resolveTheme, themeStore, type ResolvedTheme } from '@/stores/theme'
 import { documentPictureInPictureStore } from '@/stores/documentPictureInPicture'
-import { useIsSdkContext } from '@/features/sdk/hooks/useIsSdkContext'
 
 const DARK_QUERY = '(prefers-color-scheme: dark)'
 
@@ -19,6 +19,13 @@ export const applyResolvedTheme = (doc: Document, theme: ResolvedTheme) => {
     ?.setAttribute('content', THEME_COLOR[theme])
 }
 
+/**
+ * SDK pages (/sdk and /sdk/...), with the same rule as the script in
+ * index.html. Not useIsSdkContext: it matches any path containing '/sdk',
+ * such as the room /sdk-abcd-efg, which would flash dark and then turn light.
+ */
+export const isSdkPath = (pathname: string) => /^\/sdk(\/|$)/.test(pathname)
+
 const systemPrefersDark = () =>
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
@@ -30,7 +37,7 @@ const systemPrefersDark = () =>
  */
 export function useResolvedTheme(): ResolvedTheme {
   const { preference } = useSnapshot(themeStore)
-  const isSdkContext = useIsSdkContext()
+  const [location] = useLocation()
   const [systemDark, setSystemDark] = useState(systemPrefersDark)
 
   useEffect(() => {
@@ -41,7 +48,7 @@ export function useResolvedTheme(): ResolvedTheme {
     return () => mql.removeEventListener('change', onChange)
   }, [])
 
-  return isSdkContext ? 'light' : resolveTheme(preference, systemDark)
+  return isSdkPath(location) ? 'light' : resolveTheme(preference, systemDark)
 }
 
 /**

@@ -103,7 +103,10 @@ const slider = sva({
           backgroundColor: 'surface.raised',
           borderColor: 'accent',
           '&[data-hovered], &[data-dragging]': {
-            boxShadow: '0 0 0 4px {colors.accent.subtle-hover}',
+            boxShadow: {
+              base: '0 0 0 4px {colors.primary.200}',
+              _dark: '0 0 0 4px {colors.accent.subtle-hover}',
+            },
           },
         },
       },

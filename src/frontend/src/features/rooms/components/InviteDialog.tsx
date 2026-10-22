@@ -200,7 +200,10 @@ export const InviteDialog = ({ mode }: { mode: 'join' | 'create' }) => {
           <HStack>
             <div
               className={css({
-                backgroundColor: 'accent.subtle',
+                backgroundColor: {
+                  base: 'primary.200',
+                  _dark: 'accent.subtle',
+                },
                 borderRadius: '50%',
                 padding: '4px',
                 marginTop: '1rem',

@@ -68,7 +68,8 @@ const labelClass = css({
 const valueClass = css({
   fontFamily: 'mono',
   textStyle: 'xs',
-  color: 'greyscale.500',
+  // same grey as the pending/skipped labels (stepAppearance.ts)
+  color: { base: 'greyscale.500', _dark: 'gray.400' },
   overflowWrap: 'anywhere',
 })
 

@@ -111,7 +111,7 @@ export const buttonRecipe = cva({
       bigSquare: {
         width: '56px',
         height: '56px',
-        borderColor: 'border.subtle',
+        borderColor: { base: 'greyscale.200', _dark: 'border.subtle' },
         borderRadius: '4px',
         backgroundColor: 'surface.sunken',
         padding: '0',
@@ -316,7 +316,10 @@ export const buttonRecipe = cva({
       text: {
         color: 'primary',
         '&[data-hovered]': {
-          background: 'surface.hover !important',
+          background: {
+            base: 'gray.100 !important',
+            _dark: 'surface.hover !important',
+          },
           color: 'primary !important',
         },
       },

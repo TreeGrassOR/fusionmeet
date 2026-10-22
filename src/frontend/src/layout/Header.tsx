@@ -47,7 +47,7 @@ const LoginHint = () => {
         maxWidth: 'min(350px, calc(100vw - 2rem))',
         boxShadow: '0 2px 5px rgba(0 0 0 / 0.1)',
         borderRadius: '1rem',
-        backgroundColor: 'accent.subtle',
+        backgroundColor: { base: 'primary.200', _dark: 'accent.subtle' },
         _after: {
           content: '""',
           position: 'absolute',
@@ -55,8 +55,10 @@ const LoginHint = () => {
           right: '1.5rem',
           borderWidth: '0 10px 10px 10px',
           borderStyle: 'solid',
-          borderColor:
-            'transparent transparent {colors.accent.subtle} transparent',
+          borderColor: {
+            base: 'transparent transparent {colors.primary.200} transparent',
+            _dark: 'transparent transparent {colors.accent.subtle} transparent',
+          },
         },
       })}
     >

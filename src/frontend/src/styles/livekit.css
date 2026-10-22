@@ -1,17 +1,18 @@
 /* based on https://github.com/livekit/components-js/blob/main/packages/styles/scss/themes/default.scss
 */
 /* color-scheme comes from the panda globalCss (light, or dark with
-   [data-theme=dark] on <html>); the colours below follow the theme tokens. */
+   [data-theme=dark] on <html>). The greys keep their light values here and
+   follow the theme tokens in the dark theme (block below). */
 [data-lk-theme='visio-light'] {
   --lk-bg: var(--colors-surface-raised);
   --lk-room-bg: var(--colors-default-bg);
-  --lk-bg2: var(--colors-surface-hover);
-  --lk-bg3: var(--colors-surface-pressed);
-  --lk-bg4: var(--colors-border);
-  --lk-bg5: var(--colors-border-strong);
+  --lk-bg2: var(--colors-gray-100);
+  --lk-bg3: var(--colors-gray-200);
+  --lk-bg4: var(--colors-gray-300);
+  --lk-bg5: var(--colors-gray-400);
   --lk-fg: var(--colors-fg);
-  --lk-fg5: var(--colors-fg-muted);
-  --lk-border-color: var(--colors-border);
+  --lk-fg5: #52525b;
+  --lk-border-color: var(--colors-gray-400);
   /* in-call accents (speaking border, active device…): the light-theme
      values of the primary tokens, so the call looks the same in both themes */
   --lk-accent-fg: var(--colors-white);
@@ -49,6 +50,17 @@
   --lk-control-border: var(--lk-control-border-color);
   --lk-control-hover-border: var(--lk-bg6);
 
+  --lk-controlbar-bg: var(--colors-gray-300);
+  --lk-participant-border: var(--colors-gray-400);
+}
+
+[data-theme='dark'][data-lk-theme='visio-light'] {
+  --lk-bg2: var(--colors-surface-hover);
+  --lk-bg3: var(--colors-surface-pressed);
+  --lk-bg4: var(--colors-border);
+  --lk-bg5: var(--colors-border-strong);
+  --lk-fg5: var(--colors-fg-muted);
+  --lk-border-color: var(--colors-border);
   --lk-controlbar-bg: var(--colors-surface-pressed);
   --lk-participant-border: var(--colors-border-strong);
 }

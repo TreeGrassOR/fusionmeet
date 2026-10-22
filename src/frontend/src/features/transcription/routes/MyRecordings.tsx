@@ -257,7 +257,7 @@ const MeetingCard = ({ meeting }: { meeting: Meeting }) => {
       aria-labelledby={headingId}
       className={css({
         border: '1px solid',
-        borderColor: 'border',
+        borderColor: { base: 'greyscale.200', _dark: 'border' },
         borderRadius: '8px',
         paddingX: '1rem',
         paddingTop: '1rem',
