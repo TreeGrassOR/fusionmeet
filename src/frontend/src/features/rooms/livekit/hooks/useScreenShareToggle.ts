@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import {
   useRoomContext,
   useTrackToggle,
@@ -46,7 +46,6 @@ export const useScreenShareToggle = ({
     source: Track.Source.ScreenShare,
     onChange,
   })
-  const [isPending, setIsPending] = useState(false)
   const isPendingRef = useRef(false)
   const onDeviceErrorRef = useRef(onDeviceError)
   useEffect(() => {
@@ -59,7 +58,6 @@ export const useScreenShareToggle = ({
   const toggle = useCallback(async () => {
     if (isPendingRef.current) return
     isPendingRef.current = true
-    setIsPending(true)
     const participant = room.localParticipant
     try {
       if (participant.isScreenShareEnabled) {
@@ -72,9 +70,8 @@ export const useScreenShareToggle = ({
       if (error instanceof Error) onDeviceErrorRef.current?.(error)
     } finally {
       isPendingRef.current = false
-      setIsPending(false)
     }
   }, [room])
 
-  return { enabled, isPending, toggle }
+  return { enabled, toggle }
 }

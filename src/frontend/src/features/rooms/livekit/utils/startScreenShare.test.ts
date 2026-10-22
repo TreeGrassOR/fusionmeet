@@ -12,6 +12,7 @@ import {
   type LocalParticipant,
   type ScreenShareCaptureOptions,
 } from 'livekit-client'
+import { TrackSource } from '@livekit/protocol'
 
 const CHROME_UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
@@ -48,18 +49,41 @@ const screenTracks = ({
   return { video, audio, tracks: withAudio ? [video, audio] : [video] }
 }
 
+const ALL_SOURCES = [
+  TrackSource.CAMERA,
+  TrackSource.MICROPHONE,
+  TrackSource.SCREEN_SHARE,
+  TrackSource.SCREEN_SHARE_AUDIO,
+]
+
+const SOURCE_OF_TRACK: Partial<Record<Track.Source, TrackSource>> = {
+  [Track.Source.ScreenShare]: TrackSource.SCREEN_SHARE,
+  [Track.Source.ScreenShareAudio]: TrackSource.SCREEN_SHARE_AUDIO,
+}
+
 const createParticipant = (
   capture: () => Promise<FakeTrack[]>,
   publish: (track: FakeTrack) => Promise<unknown> = async () => ({})
 ) => {
   const participant = {
     isScreenShareEnabled: false,
+    permissions: { canPublish: true, canPublishSources: ALL_SOURCES },
     createScreenTracks: vi.fn(async (options?: ScreenShareCaptureOptions) => {
       void options
       return capture()
     }),
-    publishTrack: vi.fn((track: FakeTrack, options?: unknown) => {
+    publishTrack: vi.fn(async (track: FakeTrack, options?: unknown) => {
       void options
+      // livekit-client 2.21 LocalParticipant.hasPermissionsToPublish
+      const { canPublish, canPublishSources } = participant.permissions
+      const source = SOURCE_OF_TRACK[track.source]
+      if (
+        !canPublish ||
+        (canPublishSources.length > 0 &&
+          (source === undefined || !canPublishSources.includes(source)))
+      ) {
+        throw new Error('failed to publish track, insufficient permissions')
+      }
       return publish(track)
     }),
     unpublishTrack: vi.fn(async (track: FakeTrack) => {
@@ -244,5 +268,77 @@ describe('startScreenShare', () => {
     expect(participant.unpublishTrack).not.toHaveBeenCalledWith(video)
     expect(video.stop).toHaveBeenCalled()
     expect(audio.stop).toHaveBeenCalled()
+  })
+
+  describe('when screen share audio may not be published', () => {
+    const WITHOUT_AUDIO = [
+      TrackSource.CAMERA,
+      TrackSource.MICROPHONE,
+      TrackSource.SCREEN_SHARE,
+    ]
+
+    it('does not ask the browser for audio', async () => {
+      const { startScreenShare, getScreenShareCaptureOptions } =
+        await loadModules({ restrictOwnAudio: true })
+      const { video, tracks } = screenTracks({
+        displaySurface: 'browser',
+        withAudio: false,
+      })
+      const { participant, lp } = createParticipant(async () => tracks)
+      participant.permissions.canPublishSources = WITHOUT_AUDIO
+
+      await expect(startScreenShare(lp)).resolves.toBeNull()
+
+      const [options] = participant.createScreenTracks.mock.calls[0]
+      expect(options).toMatchObject({
+        audio: false,
+        systemAudio: 'exclude',
+        selfBrowserSurface: 'exclude',
+      })
+      expect(
+        participant.publishTrack.mock.calls.map(([track]) => track)
+      ).toEqual([video])
+      // the cached options, computed once per page, stay as they were
+      expect(getScreenShareCaptureOptions()).toMatchObject({
+        audio: { restrictOwnAudio: true },
+        systemAudio: 'include',
+      })
+    })
+
+    it('drops a captured audio track instead of failing the share', async () => {
+      // tab audio is kept by the conference check: only the permission
+      // stops it. The permission may also change while the picker is open.
+      const { startScreenShare } = await loadModules({ restrictOwnAudio: true })
+      const { video, audio, tracks } = screenTracks({
+        displaySurface: 'browser',
+      })
+      const { participant, lp } = createParticipant(async () => {
+        participant.permissions.canPublishSources = WITHOUT_AUDIO
+        return tracks
+      })
+
+      await expect(startScreenShare(lp)).resolves.toBeNull()
+
+      expect(audio.stop).toHaveBeenCalled()
+      expect(video.stop).not.toHaveBeenCalled()
+      expect(
+        participant.publishTrack.mock.calls.map(([track]) => track)
+      ).toEqual([video])
+      expect(participant.unpublishTrack).not.toHaveBeenCalled()
+    })
+
+    it('treats an empty source list as every source allowed', async () => {
+      // livekit-client's own rule
+      const { startScreenShare } = await loadModules({ restrictOwnAudio: true })
+      const { tracks } = screenTracks({ displaySurface: 'browser' })
+      const { participant, lp } = createParticipant(async () => tracks)
+      participant.permissions.canPublishSources = []
+
+      await expect(startScreenShare(lp)).resolves.toBeNull()
+
+      const [options] = participant.createScreenTracks.mock.calls[0]
+      expect(options).toMatchObject({ audio: { restrictOwnAudio: true } })
+      expect(participant.publishTrack).toHaveBeenCalledTimes(2)
+    })
   })
 })

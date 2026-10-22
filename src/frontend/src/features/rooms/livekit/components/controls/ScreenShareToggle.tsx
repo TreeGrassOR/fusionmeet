@@ -24,7 +24,7 @@ export const ScreenShareToggle = ({
   ...props
 }: Props) => {
   const { t } = useTranslation('rooms', { keyPrefix: 'controls.screenShare' })
-  const { enabled, isPending, toggle } = useScreenShareToggle({
+  const { enabled, toggle } = useScreenShareToggle({
     onChange,
     onDeviceError,
   })
@@ -38,7 +38,9 @@ export const ScreenShareToggle = ({
   return (
     <ToggleButton
       isSelected={enabled}
-      isDisabled={!canShareScreen || isPending}
+      // not disabled while pending, which would drop the keyboard focus to
+      // <body>: the hook already ignores presses until it settles
+      isDisabled={!canShareScreen}
       square
       variant={variant}
       aria-label={t(tooltipLabel)}
