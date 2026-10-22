@@ -47,7 +47,7 @@ const tabsStyle = css({
 const tabListContainerStyle = css({
   display: 'flex',
   flexDirection: 'column',
-  borderRight: '1px solid lightGray', // fixme poor color management
+  borderRight: '1px solid {colors.border}',
   paddingY: '1rem',
   paddingLeft: '0.2rem',
   paddingRight: '1.5rem',

@@ -70,13 +70,13 @@ const VisualCountDown = () => {
       className={css({
         height: '50px',
         width: '50px',
-        backgroundColor: 'blue.100',
+        backgroundColor: { base: 'blue.100', _dark: 'accent.subtle' },
         borderRadius: '25px',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
         fontWeight: '500',
-        color: 'blue.800',
+        color: { base: 'blue.800', _dark: 'accent.text' },
         margin: 'auto',
       })}
       aria-hidden="true"

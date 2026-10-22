@@ -1,0 +1,12 @@
+{
+  "heading": "Apparence",
+  "theme": {
+    "description": "Enregistré dans ce navigateur.",
+    "label": "Thème",
+    "options": {
+      "dark": "Sombre",
+      "light": "Clair",
+      "system": "Comme le système"
+    }
+  }
+}

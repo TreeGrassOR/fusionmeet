@@ -12,10 +12,10 @@ export const LoginPrompt = ({ heading, body }: LoginPromptProps) => {
   return (
     <div
       className={css({
-        backgroundColor: 'primary.50',
+        backgroundColor: { base: 'primary.50', _dark: 'accent.subtle' },
         borderRadius: '5px',
         border: '1px solid',
-        borderColor: 'primary.200',
+        borderColor: { base: 'primary.200', _dark: 'border' },
         paddingY: '1rem',
         paddingX: '1rem',
         marginTop: '1rem',

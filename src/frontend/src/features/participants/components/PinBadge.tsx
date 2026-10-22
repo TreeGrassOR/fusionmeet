@@ -37,7 +37,7 @@ export const PinBadge = ({ participant }: { participant: Participant }) => {
         height: '18px',
         width: '18px',
         borderRadius: '100%',
-        background: 'white',
+        background: 'surface.raised',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',

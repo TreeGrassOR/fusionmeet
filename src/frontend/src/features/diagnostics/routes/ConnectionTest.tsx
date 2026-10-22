@@ -24,13 +24,16 @@ const HIDE_LIVEKIT_VIDEO_CLASS = 'connection-test-hide-livekit-video'
 
 const sectionClass = css({
   width: '100%',
-  borderTop: '2px solid {colors.greyscale.900}',
+  borderTop: {
+    base: '2px solid {colors.greyscale.900}',
+    _dark: '2px solid {colors.border.strong}',
+  },
   paddingTop: '1rem',
 })
 
 const sectionTitleClass = css({
   textStyle: 'h2',
-  color: 'greyscale.1000',
+  color: 'fg',
   margin: 0,
 })
 
@@ -47,15 +50,15 @@ const helpClass = css({
   gap: '0.5rem',
   width: '100%',
   borderRadius: 8,
-  border: '1px solid {colors.greyscale.200}',
-  backgroundColor: 'white',
+  border: '1px solid {colors.border}',
+  backgroundColor: 'surface.raised',
   padding: '0.75rem 1rem',
   textStyle: 'sm',
-  color: 'greyscale.800',
+  color: { base: 'greyscale.800', _dark: 'fg' },
 })
 
 const helpIconClass = css({
-  color: 'danger.600',
+  color: { base: 'danger.600', _dark: 'danger.400' },
   flexShrink: 0,
   marginTop: '2px',
 })

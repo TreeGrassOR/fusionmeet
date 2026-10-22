@@ -27,6 +27,8 @@ const link = cva({
           content: 'url(/assets/link-grey.svg)',
           verticalAlign: 'middle',
           paddingLeft: '.25rem',
+          // the grey icon is an image: lighten it on dark surfaces
+          _dark: { filter: 'invert(1)' },
         },
       },
     },
@@ -53,7 +55,7 @@ const link = cva({
     },
     color: {
       primary: {
-        color: 'blue',
+        color: { base: 'blue', _dark: 'accent.text' },
       },
       note: {
         color: 'default.subtle-text',

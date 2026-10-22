@@ -65,6 +65,11 @@ main#main-content :is(h1, h2, h3)[tabindex='-1']:focus {
   outline-offset: 1px;
 }
 
+/* The header logo is an <img> with dark fills: lighten it on the dark theme. */
+[data-theme='dark'] img.Header-logo {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;

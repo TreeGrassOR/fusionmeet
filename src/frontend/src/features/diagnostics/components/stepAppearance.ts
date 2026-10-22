@@ -11,7 +11,7 @@ export const statusSquareClass: Record<ConnectionTestStepStatus, string> = {
     border: '1px solid {colors.greyscale.300}',
   }),
   running: css({
-    backgroundColor: 'primary.800',
+    backgroundColor: 'accent',
     animation: 'pulse_background 1.2s ease-in-out infinite',
   }),
   success: css({ backgroundColor: 'success.600' }),
@@ -26,9 +26,15 @@ export const statusSquareClass: Record<ConnectionTestStepStatus, string> = {
  */
 export const statusTextClass: Record<ConnectionTestStepStatus, string> = {
   pending: css({ color: 'greyscale.500' }),
-  running: css({ color: 'greyscale.700' }),
-  success: css({ color: 'greyscale.1000' }),
-  warning: css({ color: 'warning', fontWeight: 'medium' }),
-  failed: css({ color: 'danger.600', fontWeight: 'medium' }),
+  running: css({ color: { base: 'greyscale.700', _dark: 'fg.muted' } }),
+  success: css({ color: 'fg' }),
+  warning: css({
+    color: { base: 'warning', _dark: 'warning.subtle-text' },
+    fontWeight: 'medium',
+  }),
+  failed: css({
+    color: { base: 'danger.600', _dark: 'danger.400' },
+    fontWeight: 'medium',
+  }),
   skipped: css({ color: 'greyscale.500' }),
 }

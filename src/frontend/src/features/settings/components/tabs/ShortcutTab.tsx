@@ -19,7 +19,7 @@ const tableStyle = css({
     fontWeight: 'normal',
   },
   '& tbody tr': {
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    borderBottom: '1px solid {colors.border.subtle}',
   },
 })
 

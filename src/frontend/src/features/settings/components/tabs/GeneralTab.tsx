@@ -4,6 +4,7 @@ import { useLanguageLabels } from '@/i18n/useLanguageLabels'
 import { TabPanel, type TabPanelProps } from '@/primitives/Tabs'
 import { userPreferencesStore } from '@/stores/userPreferences'
 import { useSnapshot } from 'valtio'
+import { AppearanceFields } from '../AppearanceFields'
 
 export type GeneralTabProps = Pick<TabPanelProps, 'id'>
 
@@ -25,6 +26,7 @@ export const GeneralTab = ({ id }: GeneralTabProps) => {
           i18n.changeLanguage(lang as string)
         }}
       />
+      <AppearanceFields />
       <H lvl={2}>{t('preferences.title')}</H>
       <Field
         type="switch"

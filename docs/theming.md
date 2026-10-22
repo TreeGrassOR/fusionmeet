@@ -42,7 +42,11 @@ Then, set the `FRONTEND_CUSTOM_CSS_URL` environment variable to the URL of your 
 
 > [!IMPORTANT]
 > You can override any CSS token—semantic or palette. See [panda.config.ts](../src/frontend/panda.config.ts) for all defined semantic tokens.
-> The app does **not provide separate light/dark themes**: outside a meeting it defaults to light, and in a room it switches to dark.
+> The app has a **light and a dark theme**. Users pick "system", "light" or "dark" in the settings (stored per browser in
+> `localStorage`, key `app_theme`); the resolved theme is set as `data-theme="light|dark"` on `<html>`. The call itself
+> (video, control bar) stays dark in both themes; dialogs and the side panel follow the theme. SDK pages are always light.
+> Your custom CSS is not in a cascade layer, so a `:root { --colors-… }` override wins in **both** themes: scope dark-only
+> overrides with `[data-theme=dark] { … }`.
  
 
 ### Key Semantic Tokens
@@ -52,7 +56,10 @@ These control the main visual aspects of the interface:
 | Category   | Purpose                         | Example Token               |
 | ---------- | ------------------------------- | --------------------------- |
 | Primary    | Brand color, buttons, links     | `--colors-primary`          |
-| Dark Mode  | Primary color in room/dark mode | `--colors-primary-dark-500` |
+| Accent     | Brand color, theme-aware        | `--colors-accent`           |
+| Surface    | Page, dialog and hover backgrounds, theme-aware | `--colors-surface-page`, `--colors-surface-raised` |
+| Text       | Body and secondary text, theme-aware | `--colors-fg`, `--colors-fg-muted` |
+| Call       | In-call (always dark) palette   | `--colors-primary-dark-500` |
 | Greyscale  | Text, backgrounds, borders      | `--colors-greyscale-500`    |
 | Success    | Success states                  | `--colors-success`          |
 | Error      | Errors and destructive actions  | `--colors-error`            |

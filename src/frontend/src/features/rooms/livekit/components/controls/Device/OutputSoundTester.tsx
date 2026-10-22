@@ -29,10 +29,10 @@ const StyledContainer = styled('div', {
   variants: {
     theme: {
       light: {
-        borderColor: 'gray.200',
+        borderTop: '1px solid {colors.border.subtle}',
       },
       dark: {
-        borderColor: 'primaryDark.300',
+        borderTop: '1px solid {colors.primaryDark.300}',
       },
     },
   },

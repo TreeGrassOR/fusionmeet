@@ -1,21 +1,24 @@
 /* based on https://github.com/livekit/components-js/blob/main/packages/styles/scss/themes/default.scss
 */
+/* color-scheme comes from the panda globalCss (light, or dark with
+   [data-theme=dark] on <html>); the colours below follow the theme tokens. */
 [data-lk-theme='visio-light'] {
-  color-scheme: light;
-  --lk-bg: var(--colors-white);
+  --lk-bg: var(--colors-surface-raised);
   --lk-room-bg: var(--colors-default-bg);
-  --lk-bg2: var(--colors-gray-100);
-  --lk-bg3: var(--colors-gray-200);
-  --lk-bg4: var(--colors-gray-300);
-  --lk-bg5: var(--colors-gray-400);
-  --lk-fg: var(--colors-text);
-  --lk-fg5: #52525b;
-  --lk-border-color: var(--colors-gray-400);
-  --lk-accent-fg: var(--colors-primary-text);
-  --lk-accent-bg: var(--colors-primary);
-  --lk-accent2: var(--colors-primary-hover);
-  --lk-accent3: var(--colors-primary-active);
-  --lk-accent4: var(--colors-primary-active);
+  --lk-bg2: var(--colors-surface-hover);
+  --lk-bg3: var(--colors-surface-pressed);
+  --lk-bg4: var(--colors-border);
+  --lk-bg5: var(--colors-border-strong);
+  --lk-fg: var(--colors-fg);
+  --lk-fg5: var(--colors-fg-muted);
+  --lk-border-color: var(--colors-border);
+  /* in-call accents (speaking border, active device…): the light-theme
+     values of the primary tokens, so the call looks the same in both themes */
+  --lk-accent-fg: var(--colors-white);
+  --lk-accent-bg: var(--colors-blue-700);
+  --lk-accent2: var(--colors-blue-800);
+  --lk-accent3: var(--colors-blue-900);
+  --lk-accent4: var(--colors-blue-900);
   --lk-danger-fg: var(--colors-danger-text);
   --lk-danger: var(--colors-danger);
   --lk-danger-hover-bg: var(--colors-danger-hover);
@@ -40,14 +43,14 @@
 
   --lk-font-family: var(--fonts-sans);
   --lk-font-size: 1rem;
-  --lk-bg6: #6b7280;
+  --lk-bg6: var(--colors-border-strong);
   --lk-control-border-width: 1px;
   --lk-control-border-color: var(--lk-bg5);
   --lk-control-border: var(--lk-control-border-color);
   --lk-control-hover-border: var(--lk-bg6);
 
-  --lk-controlbar-bg: var(--colors-gray-300);
-  --lk-participant-border: var(--colors-gray-400);
+  --lk-controlbar-bg: var(--colors-surface-pressed);
+  --lk-participant-border: var(--colors-border-strong);
 }
 
 [data-lk-theme] .lk-room-container {

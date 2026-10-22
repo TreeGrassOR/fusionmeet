@@ -33,7 +33,7 @@ const StyledRACDialog = styled(Dialog, {
     padding: '1.5rem',
     boxShadow:
       '0 1px 2px 0 rgba(60, 64, 67, .3), 0 2px 6px 2px rgba(60, 64, 67, .15)',
-    backgroundColor: 'white',
+    backgroundColor: 'surface.raised',
     '&[data-entering]': { animation: 'fade 200ms' },
     '&[data-exiting]': { animation: 'fade 150ms reverse ease-in' },
   },
@@ -200,7 +200,7 @@ export const InviteDialog = ({ mode }: { mode: 'join' | 'create' }) => {
           <HStack>
             <div
               className={css({
-                backgroundColor: 'primary.200',
+                backgroundColor: 'accent.subtle',
                 borderRadius: '50%',
                 padding: '4px',
                 marginTop: '1rem',
@@ -209,7 +209,7 @@ export const InviteDialog = ({ mode }: { mode: 'join' | 'create' }) => {
               <RiSpam2Fill
                 size={22}
                 className={css({
-                  fill: 'primary.500',
+                  fill: { base: 'primary.500', _dark: 'accent' },
                 })}
               />
             </div>

@@ -2,6 +2,30 @@
 <html lang="ru" data-lk-theme="visio-light">
   <head>
     <meta charset="UTF-8" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <script>
+      // Set the light/dark theme before the CSS loads, to avoid a flash.
+      // Same rules as src/stores/theme.ts and src/hooks/useApplyTheme.ts.
+      (function () {
+        try {
+          var p = localStorage.getItem('app_theme')
+          var dark =
+            p === 'dark' ||
+            (p !== 'light' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (/^\/sdk(\/|$)/.test(location.pathname)) dark = false
+          document.documentElement.setAttribute(
+            'data-theme',
+            dark ? 'dark' : 'light'
+          )
+          if (dark) {
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute('content', '#161622')
+          }
+        } catch (e) {}
+      })()
+    </script>
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">

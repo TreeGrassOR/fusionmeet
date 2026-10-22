@@ -122,9 +122,9 @@ export const ControlsButton = ({
       {statuses.isAnotherModeStarted && (
         <RACButton
           className={css({
-            backgroundColor: 'primary.50',
+            backgroundColor: { base: 'primary.50', _dark: 'accent.subtle' },
             border: '1px solid',
-            borderColor: 'primary.200',
+            borderColor: { base: 'primary.200', _dark: 'border' },
             borderRadius: '6px',
             padding: '0.75rem',
             marginBottom: '0.75rem',
@@ -135,15 +135,18 @@ export const ControlsButton = ({
             width: '100%',
             cursor: 'pointer',
             _hover: {
-              backgroundColor: 'primary.100',
-              borderColor: 'primary.400',
+              backgroundColor: {
+                base: 'primary.100',
+                _dark: 'accent.subtle-hover',
+              },
+              borderColor: { base: 'primary.400', _dark: 'border.strong' },
             },
           })}
           onPress={() => openSidePanel()}
         >
           <Icon
             className={css({
-              color: 'primary.500',
+              color: { base: 'primary.500', _dark: 'accent.text' },
               marginRight: '1rem',
             })}
             name="info"
@@ -153,7 +156,7 @@ export const ControlsButton = ({
           </Text>
           <Icon
             className={css({
-              color: 'primary.500',
+              color: { base: 'primary.500', _dark: 'accent.text' },
               marginLeft: 'auto',
             })}
             name="chevron_right"

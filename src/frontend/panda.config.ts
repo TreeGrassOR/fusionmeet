@@ -36,6 +36,19 @@ const config: Config = {
   jsxFramework: 'react',
   outdir: 'src/styled-system',
   globalFontface: {},
+  // Dark theme: `data-theme` on <html> (set by the inline script in index.html
+  // and by useApplyTheme). It replaces the preset's `.dark &` class condition.
+  conditions: {
+    extend: {
+      dark: '[data-theme=dark] &',
+      light: '[data-theme=light] &',
+    },
+  },
+  globalCss: {
+    html: { colorScheme: 'light' },
+    '[data-theme=dark]': { colorScheme: 'dark' },
+    body: { backgroundColor: 'surface.page', color: 'fg' },
+  },
   theme: {
     ...pandaPreset.theme,
     // media queries are defined in em so that zooming with text-only mode triggers breakpoints
@@ -289,41 +302,219 @@ const config: Config = {
     }),
     semanticTokens: defineSemanticTokens({
       colors: {
+        /* Theme-aware tokens: `base` is the light theme, `_dark` the dark one.
+         * Light surfaces use only these (and the groups below), never the raw
+         * palettes, which keep the same value in both themes. The in-call
+         * chrome stays dark in both themes and keeps using `primaryDark.*`.
+         */
+        surface: {
+          page: {
+            value: { base: '{colors.white}', _dark: '{colors.primaryDark.50}' },
+          },
+          // dialogs, side panel, popovers, cards
+          raised: {
+            value: { base: '{colors.white}', _dark: '{colors.primaryDark.75}' },
+          },
+          sunken: {
+            value: {
+              base: '{colors.greyscale.50}',
+              _dark: '{colors.primaryDark.50}',
+            },
+          },
+          hover: {
+            value: {
+              base: '{colors.greyscale.100}',
+              _dark: '{colors.primaryDark.100}',
+            },
+          },
+          pressed: {
+            value: {
+              base: '{colors.greyscale.200}',
+              _dark: '{colors.primaryDark.200}',
+            },
+          },
+          overlay: {
+            value: { base: 'rgba(0, 0, 0, 0.4)', _dark: 'rgba(0, 0, 0, 0.6)' },
+          },
+        },
+        fg: {
+          DEFAULT: {
+            value: {
+              base: '{colors.greyscale.1000}',
+              _dark: '{colors.greyscale.100}',
+            },
+          },
+          muted: {
+            value: {
+              base: '{colors.greyscale.600}',
+              _dark: '{colors.greyscale.400}',
+            },
+          },
+          // placeholders and disabled content only
+          subtle: {
+            value: {
+              base: '{colors.greyscale.400}',
+              _dark: '{colors.greyscale.500}',
+            },
+          },
+          // text on an `accent` background
+          onAccent: {
+            value: { base: '{colors.white}', _dark: '{colors.primaryDark.50}' },
+          },
+        },
+        border: {
+          // dividers (decorative)
+          DEFAULT: {
+            value: {
+              base: '{colors.greyscale.250}',
+              _dark: '{colors.primaryDark.200}',
+            },
+          },
+          subtle: {
+            value: {
+              base: '{colors.greyscale.100}',
+              _dark: '{colors.primaryDark.100}',
+            },
+          },
+          // input borders (3:1 against the surface)
+          strong: {
+            value: {
+              base: '{colors.gray.500}',
+              _dark: '{colors.primaryDark.400}',
+            },
+          },
+        },
+        // the brand colour: primary.800 is unreadable on a dark surface
+        accent: {
+          DEFAULT: {
+            value: {
+              base: '{colors.primary.800}',
+              _dark: '{colors.primaryDark.action}',
+            },
+          },
+          hover: {
+            value: {
+              base: '{colors.primary.action}',
+              _dark: '{colors.primaryDark.900}',
+            },
+          },
+          // links and brand-coloured text
+          text: {
+            value: {
+              base: '{colors.primary.800}',
+              _dark: '{colors.primaryDark.action}',
+            },
+          },
+          subtle: {
+            value: {
+              base: '{colors.primary.100}',
+              _dark: '{colors.primaryDark.100}',
+            },
+          },
+          'subtle-hover': {
+            value: {
+              base: '{colors.primary.300}',
+              _dark: '{colors.primaryDark.200}',
+            },
+          },
+        },
         default: {
-          text: { value: '{colors.greyscale.1000}' },
-          bg: { value: 'white' },
-          subtle: { value: '{colors.gray.100}' },
-          'subtle-text': { value: '{colors.gray.600}' },
+          text: { value: '{colors.fg}' },
+          bg: { value: '{colors.surface.page}' },
+          subtle: {
+            value: {
+              base: '{colors.gray.100}',
+              _dark: '{colors.primaryDark.100}',
+            },
+          },
+          'subtle-text': {
+            value: { base: '{colors.gray.600}', _dark: '{colors.fg.muted}' },
+          },
         },
         box: {
           text: { value: '{colors.default.text}' },
-          bg: { value: '{colors.white}' },
-          border: { value: '{colors.gray.300}' },
+          bg: { value: '{colors.surface.raised}' },
+          border: {
+            value: {
+              base: '{colors.gray.300}',
+              _dark: '{colors.primaryDark.200}',
+            },
+          },
         },
         control: {
-          DEFAULT: { value: '{colors.gray.100}' },
-          hover: { value: '{colors.gray.200}' },
-          active: { value: '{colors.gray.300}' },
-          text: { value: '{colors.default.text}' },
-          border: { value: '{colors.gray.500}' },
+          DEFAULT: {
+            value: {
+              base: '{colors.gray.100}',
+              _dark: '{colors.primaryDark.100}',
+            },
+          },
+          hover: {
+            value: {
+              base: '{colors.gray.200}',
+              _dark: '{colors.primaryDark.200}',
+            },
+          },
+          active: {
+            value: {
+              base: '{colors.gray.300}',
+              _dark: '{colors.primaryDark.300}',
+            },
+          },
+          text: { value: '{colors.fg}' },
+          border: {
+            value: {
+              base: '{colors.gray.500}',
+              _dark: '{colors.primaryDark.400}',
+            },
+          },
           subtle: { value: '{colors.gray.400}' },
         },
         primary: {
-          DEFAULT: { value: '{colors.blue.700}' },
-          hover: { value: '{colors.blue.800}' },
-          active: { value: '{colors.blue.900}' },
+          DEFAULT: {
+            value: {
+              base: '{colors.blue.700}',
+              _dark: '{colors.primaryDark.action}',
+            },
+          },
+          hover: {
+            value: {
+              base: '{colors.blue.800}',
+              _dark: '{colors.primaryDark.900}',
+            },
+          },
+          active: {
+            value: {
+              base: '{colors.blue.900}',
+              _dark: '{colors.primaryDark.950}',
+            },
+          },
+          // stays white: it is also the text of the dark call menus
           text: { value: '{colors.white}' },
           warm: { value: '{colors.blue.300}' },
-          subtle: { value: '{colors.blue.100}' },
-          'subtle-text': { value: '{colors.blue.700}' },
+          subtle: {
+            value: {
+              base: '{colors.blue.100}',
+              _dark: '{colors.primaryDark.100}',
+            },
+          },
+          'subtle-text': {
+            value: {
+              base: '{colors.blue.700}',
+              _dark: '{colors.primaryDark.action}',
+            },
+          },
         },
         danger: {
           DEFAULT: { value: '{colors.red.600}' },
           hover: { value: '{colors.red.700}' },
           active: { value: '{colors.red.800}' },
           text: { value: '{colors.white}' },
-          subtle: { value: '{colors.red.100}' },
-          'subtle-text': { value: '{colors.red.700}' },
+          subtle: {
+            value: { base: '{colors.red.100}', _dark: '{colors.error.100}' },
+          },
+          'subtle-text': {
+            value: { base: '{colors.red.700}', _dark: '{colors.error.700}' },
+          },
           ...pandaPreset.theme.tokens.colors.red,
         },
         alert: {
@@ -335,8 +526,12 @@ const config: Config = {
           hover: { value: '{colors.green.800}' },
           active: { value: '{colors.green.900}' },
           text: { value: '{colors.white}' },
-          subtle: { value: '{colors.green.100}' },
-          'subtle-text': { value: '{colors.green.800}' },
+          subtle: {
+            value: { base: '{colors.green.100}', _dark: '{colors.green.950}' },
+          },
+          'subtle-text': {
+            value: { base: '{colors.green.800}', _dark: '{colors.green.300}' },
+          },
           ...pandaPreset.theme.tokens.colors.green,
         },
         warning: {
@@ -344,10 +539,14 @@ const config: Config = {
           hover: { value: '{colors.amber.800}' },
           active: { value: '{colors.amber.900}' },
           text: { value: '{colors.white}' },
-          subtle: { value: '{colors.amber.100}' },
-          'subtle-text': { value: '{colors.amber.700}' },
+          subtle: {
+            value: { base: '{colors.amber.100}', _dark: '{colors.amber.950}' },
+          },
+          'subtle-text': {
+            value: { base: '{colors.amber.700}', _dark: '{colors.amber.300}' },
+          },
         },
-        focusRing: { value: 'rgb(74, 121, 199)' },
+        focusRing: { value: { base: 'rgb(74, 121, 199)', _dark: '#8AB4F8' } },
       },
       shadows: {
         box: { value: '{shadows.sm}' },

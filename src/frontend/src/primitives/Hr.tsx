@@ -5,7 +5,7 @@ export const Hr = (props: React.HTMLAttributes<HTMLHRElement>) => {
     <hr
       className={css({
         marginY: 1,
-        borderColor: 'neutral.300',
+        borderColor: 'border',
       })}
       {...props}
     />

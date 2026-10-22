@@ -94,16 +94,16 @@ const slider = sva({
           color: 'box.text',
         },
         rail: {
-          backgroundColor: 'greyscale.200',
+          backgroundColor: 'surface.pressed',
         },
         fill: {
-          backgroundColor: 'primary.800',
+          backgroundColor: 'accent',
         },
         thumb: {
-          backgroundColor: 'white',
-          borderColor: 'primary.800',
+          backgroundColor: 'surface.raised',
+          borderColor: 'accent',
           '&[data-hovered], &[data-dragging]': {
-            boxShadow: '0 0 0 4px {colors.primary.200}',
+            boxShadow: '0 0 0 4px {colors.accent.subtle-hover}',
           },
         },
       },

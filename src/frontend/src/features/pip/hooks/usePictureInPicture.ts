@@ -33,6 +33,11 @@ export const usePictureInPicture = () => {
     if (theme) {
       pipWindow.document.documentElement.dataset.lkTheme = theme
     }
+    // light/dark app theme; useApplyTheme keeps it in sync while PiP is open
+    const appTheme = document.documentElement.dataset.theme
+    if (appTheme) {
+      pipWindow.document.documentElement.dataset.theme = appTheme
+    }
   }, [])
 
   const initializePortalContainer = useCallback((pipWindow: Window) => {

@@ -35,6 +35,8 @@ const Image = styled('img', {
     maxHeight: '362px',
     height: '100%',
     width: 'fit-content',
+    // the illustrations have an opaque white background
+    _dark: { borderRadius: 16 },
   },
 })
 
@@ -49,10 +51,10 @@ const Dot = styled('div', {
   variants: {
     selected: {
       true: {
-        backgroundColor: 'primary.800',
+        backgroundColor: 'accent',
       },
       false: {
-        backgroundColor: 'primary.300',
+        backgroundColor: 'accent.subtle-hover',
       },
     },
   },
@@ -151,7 +153,7 @@ const carouselNavButton = css({
     outlineOffset: '1px',
   },
   _disabled: {
-    color: 'greyscale.400',
+    color: 'fg.subtle',
     cursor: 'default',
     pointerEvents: 'none',
     _pressed: {

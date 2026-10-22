@@ -12,6 +12,7 @@ import { LoginButton } from '@/components/LoginButton'
 import { logout } from '@/features/auth/utils/logout'
 import { useMediaQuery } from '@/features/rooms/livekit/hooks/useMediaQuery'
 import { RoomsTab } from './tabs/RoomsTab'
+import { AppearanceFields } from './AppearanceFields'
 
 export type SettingsDialogProps = Pick<DialogProps, 'isOpen' | 'onOpenChange'>
 
@@ -32,7 +33,7 @@ const tabsStyle = css({
 const tabListContainerStyle = css({
   display: 'flex',
   flexDirection: 'column',
-  borderRight: '1px solid lightGray', // fixme poor color management
+  borderRight: '1px solid {colors.border}',
   paddingY: '1rem',
   paddingLeft: '0.2rem',
   paddingRight: '1.5rem',
@@ -104,6 +105,7 @@ export const SettingsDialog = (props: SettingsDialogProps) => {
           i18n.changeLanguage(lang as string)
         }}
       />
+      <AppearanceFields />
     </div>
   )
 

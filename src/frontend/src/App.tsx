@@ -15,6 +15,7 @@ import { AppInitialization } from '@/components/AppInitialization'
 import { TransitCodeGate } from '@/features/auth/components/TransitCodeGate'
 import { useIsSdkContext } from '@/features/sdk/hooks/useIsSdkContext'
 import { useApplyA11yFonts } from '@/hooks/useApplyA11yFonts'
+import { useApplyTheme } from '@/hooks/useApplyTheme'
 
 function App() {
   const { i18n } = useTranslation()
@@ -22,6 +23,7 @@ function App() {
 
   const isSDKContext = useIsSdkContext()
   useApplyA11yFonts()
+  useApplyTheme()
 
   return (
     <QueryClientProvider client={queryClient}>
