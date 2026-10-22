@@ -5,7 +5,7 @@ import pytest
 from asr_service.config import ConfigError, Settings, default_cpu_threads
 from asr_service.main import create_app
 
-ALL = ("gigaam-v3", "parakeet-v3", "gigaam-multilingual", "gigaam-multilingual-punct")
+ALL = ("gigaam-v3", "gigaam-multilingual", "gigaam-multilingual-punct")
 
 
 def test_defaults():
@@ -41,8 +41,8 @@ def test_overrides():
     settings = Settings.from_env(
         {
             "ASR_API_KEY": "k",
-            "ASR_MODELS": " Parakeet-V3 , gigaam-v3,, ",
-            "ASR_DEFAULT_MODEL": "parakeet-v3",
+            "ASR_MODELS": " GigaAM-Multilingual , gigaam-v3,, ",
+            "ASR_DEFAULT_MODEL": "gigaam-multilingual",
             "ASR_MAX_VRAM_GB": "6.5",
             "ASR_VRAM_GB_GIGAAM_V3": "2",
             "ASR_VRAM_GB_GIGAAM_MULTILINGUAL": "2.75",
@@ -56,8 +56,8 @@ def test_overrides():
             "ASR_LOG_LEVEL": "DEBUG",
         }
     )
-    assert settings.models == ("parakeet-v3", "gigaam-v3")
-    assert settings.default_model == "parakeet-v3"
+    assert settings.models == ("gigaam-multilingual", "gigaam-v3")
+    assert settings.default_model == "gigaam-multilingual"
     assert settings.max_vram_gb == 6.5
     assert settings.model_vram_gb("gigaam-v3") == 2.0
     assert settings.model_vram_gb("gigaam-multilingual") == 2.75
@@ -108,7 +108,7 @@ def test_invalid_values(name, value, message):
 def test_default_model_must_be_enabled():
     """ASR_DEFAULT_MODEL has to be one of ASR_MODELS."""
     with pytest.raises(ConfigError, match="is not enabled in ASR_MODELS"):
-        Settings.from_env({"ASR_API_KEY": "k", "ASR_MODELS": "parakeet-v3"})
+        Settings.from_env({"ASR_API_KEY": "k", "ASR_MODELS": "gigaam-multilingual"})
 
 
 def test_removed_variables_are_reported_as_ignored():

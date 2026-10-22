@@ -40,10 +40,11 @@ MIN_DISK_GB=30
 # punctuation model. VRAM: recognisers that can run on the GPU (estimates,
 # ASR_VRAM_GB_<ID> in deploy/.env). RAM: each part on the CPU (measured, peak while
 # loading for the punctuation model, asr/README.md).
-RECOGNITION_MODELS=(gigaam-v3 parakeet-v3 gigaam-multilingual gigaam-multilingual-punct)
+RECOGNITION_MODELS=(gigaam-v3 gigaam-multilingual gigaam-multilingual-punct)
+# Removed from asr; up.sh drops it from an older deploy/.env
+REMOVED_MODEL=parakeet-v3
 declare -A MODEL_PARTS=(
   [gigaam-v3]=gigaam-v3
-  [parakeet-v3]=parakeet-v3
   [gigaam-multilingual]=gigaam-multilingual
   [gigaam-multilingual-punct]="gigaam-multilingual punctuation"
 )
@@ -52,7 +53,7 @@ declare -A PART_VRAM_KEY=(
   [gigaam-multilingual]=ASR_VRAM_GB_GIGAAM_MULTILINGUAL
 )
 declare -A PART_VRAM_GB=([gigaam-v3]=1.5 [gigaam-multilingual]=3.0)
-declare -A PART_RAM_GB=([gigaam-v3]=0.5 [parakeet-v3]=2.7 [gigaam-multilingual]=1.1 [punctuation]=1.8)
+declare -A PART_RAM_GB=([gigaam-v3]=0.5 [gigaam-multilingual]=1.1 [punctuation]=1.8)
 RAM_RESERVE_GB=2 # free RAM wanted on top of the models
 ENABLED_MODELS=() # enabled models, in the order asr loads them
 
@@ -414,8 +415,9 @@ port_check() {
     fail "$port/$proto занят: ${others[*]}"
     PROBLEMS+=("порт $port/$proto занят (${others[*]})")
   elif $behind_nginx; then
-    ok "$port/$proto занят nginx сервера: FusionMeet встанет за него (up.sh добавит в nginx"
-    note "только meet./id./livekit.<BASE_DOMAIN>, остальные сайты не меняются; PROXY_MODE в .env)"
+    ok "$port/$proto занят nginx сервера: FusionMeet встанет за него (PROXY_MODE в .env). up.sh"
+    note "добавит в nginx только имена FusionMeet, остальные сайты не меняются:"
+    note "${FM_HOSTS[*]}"
   elif $ours; then
     ok "$port/$proto занят самим FusionMeet (повторный запуск)"
   else
@@ -426,6 +428,8 @@ port_check() {
 check_ports() {
   step "5. Порты"
   command -v ss >/dev/null 2>&1 || apt_install iproute2
+  # the names forwarded by the host nginx (PROXY_MODE=nginx), see port_check
+  if [[ -f $FM_ENV_FILE ]]; then fm_load_hosts "$FM_ENV_FILE"; else fm_load_hosts "$FM_ENV_EXAMPLE"; fi
   local redis_port
   redis_port=$(env_get "$FM_ENV_FILE" REDIS_HOST_PORT)
   [[ -n $redis_port ]] || redis_port=$(env_get "$FM_ENV_EXAMPLE" REDIS_HOST_PORT)
@@ -578,14 +582,19 @@ show_vram() {
 # load_asr_models: ASR_MODELS in the order asr loads them (ASR_DEFAULT_MODEL
 # first) into ENABLED_MODELS; ids that asr would reject are recorded as problems.
 load_asr_models() {
-  local raw default item items=() models=() known=" ${RECOGNITION_MODELS[*]} "
+  local raw default item items=() models=() known=" ${RECOGNITION_MODELS[*]} " default_removed=false
   raw=$(setting ASR_MODELS "$(IFS=,; printf '%s' "${RECOGNITION_MODELS[*]}")")
   default=$(setting ASR_DEFAULT_MODEL gigaam-v3)
   read -r default <<<"${default,,}" # trim
+  [[ $default != "$REMOVED_MODEL" ]] || default_removed=true
   IFS=, read -r -a items <<<"${raw,,}"
   for item in "${items[@]}"; do
     read -r item <<<"$item" # trim
     [[ -n $item ]] || continue
+    if [[ $item == "$REMOVED_MODEL" ]]; then
+      note "ASR_MODELS: модели $item больше нет, up.sh уберёт её из $FM_ENV_FILE"
+      continue
+    fi
     if [[ $known != *" $item "* ]]; then
       fail "ASR_MODELS: неизвестная модель $item (есть: $(join_list "${RECOGNITION_MODELS[@]}"))"
       PROBLEMS+=("ASR_MODELS: неизвестная модель $item, asr не запустится")
@@ -598,6 +607,14 @@ load_asr_models() {
     fi
     models+=("$item")
   done
+  # an empty list enables every model (compose.yaml)
+  ((${#models[@]} > 0)) || models=("${RECOGNITION_MODELS[@]}")
+  if $default_removed; then
+    # the choice of up.sh: gigaam-v3 if it stays enabled, else the first model
+    default=gigaam-v3
+    [[ " ${models[*]} " == *" $default "* ]] || default=${models[0]}
+    note "ASR_DEFAULT_MODEL=$REMOVED_MODEL: модели больше нет, up.sh заменит её на $default"
+  fi
   ENABLED_MODELS=("${models[@]}")
   if [[ " ${models[*]} " != *" $default "* ]]; then
     fail "ASR_DEFAULT_MODEL=$default не входит в ASR_MODELS"
@@ -654,7 +671,7 @@ check_ram() {
     for part in ${MODEL_PARTS[$model]}; do sizes+=("${PART_RAM_GB[$part]}"); done
     sizes_info+=("$model ~$(join_list "${sizes[@]}" | sed 's/, / + /g') ГБ")
   done
-  note "Уберите лишние модели из ASR_MODELS в $FM_ENV_FILE (по умолчанию включены все четыре):"
+  note "Уберите лишние модели из ASR_MODELS в $FM_ENV_FILE (по умолчанию включены все три):"
   note "$(join_list "${sizes_info[@]}")"
   note "(gigaam-multilingual и gigaam-multilingual-punct делят одну модель)."
   [[ -f $FM_ENV_FILE ]] || note "Файл создаёт sudo $FM_DEPLOY_DIR/up.sh --env-only."
@@ -686,9 +703,9 @@ check_host() {
 
   local rmem
   rmem=$(cat /proc/sys/net/core/rmem_max 2>/dev/null || echo 0)
-  if ((rmem < 5000000)); then
-    note "LiveKit советует увеличить UDP-буферы (сейчас net.core.rmem_max=$rmem):"
-    note "  sudo sysctl -w net.core.rmem_max=16777216 net.core.wmem_max=16777216"
+  if ((rmem < 16777216)); then
+    note "UDP-буферы для LiveKit (сейчас net.core.rmem_max=$rmem) увеличит up.sh:"
+    note "net.core.rmem_max и wmem_max = 16777216, постоянно (/etc/sysctl.d/90-fusionmeet-livekit.conf)."
   fi
 }
 

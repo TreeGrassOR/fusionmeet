@@ -31,8 +31,8 @@ const payload = (models: AsrModelApi[], defaultId = 'gigaam-v3') =>
 
 const MODELS = payload([
   model('gigaam-v3', { label: 'Русский — GigaAM v3', device: 'cuda' }),
-  model('parakeet-v3', {
-    label: 'Русский и английский — Parakeet v3',
+  model('other-model', {
+    label: 'Other model',
     languages: ['ru', 'en'],
   }),
   model('gigaam-multilingual', {
@@ -74,7 +74,7 @@ describe('getEffectiveModelId', () => {
   })
 
   it('uses the model chosen in the room', () => {
-    expect(getEffectiveModelId(MODELS, 'parakeet-v3')).toBe('parakeet-v3')
+    expect(getEffectiveModelId(MODELS, 'other-model')).toBe('other-model')
   })
 
   it('keeps a chosen model that is still loading', () => {
@@ -101,7 +101,7 @@ describe('isChosenModelUnavailable', () => {
 
   it('does not flag the default or a usable model', () => {
     expect(isChosenModelUnavailable(MODELS, null)).toBe(false)
-    expect(isChosenModelUnavailable(MODELS, 'parakeet-v3')).toBe(false)
+    expect(isChosenModelUnavailable(MODELS, 'other-model')).toBe(false)
     expect(isChosenModelUnavailable(MODELS, 'gigaam-v3')).toBe(false)
   })
 })
@@ -112,7 +112,7 @@ describe('toAsrModelSetting', () => {
   })
 
   it('saves the id of any other model', () => {
-    expect(toAsrModelSetting(MODELS, 'parakeet-v3')).toBe('parakeet-v3')
+    expect(toAsrModelSetting(MODELS, 'other-model')).toBe('other-model')
   })
 })
 
@@ -125,7 +125,7 @@ describe('getModelOptionLabel', () => {
 
   it('shows the label alone for a ready model', () => {
     expect(getModelOptionLabel(MODELS.models[1], 'gigaam-v3', HINTS)).toBe(
-      'Русский и английский — Parakeet v3'
+      'Other model'
     )
   })
 
@@ -167,8 +167,8 @@ describe('getUnselectableModelIds', () => {
 describe('getTranscriptModelLabels', () => {
   it('maps the ids to their labels, in order', () => {
     expect(
-      getTranscriptModelLabels(['parakeet-v3', 'gigaam-v3'], MODELS)
-    ).toEqual(['Русский и английский — Parakeet v3', 'Русский — GigaAM v3'])
+      getTranscriptModelLabels(['other-model', 'gigaam-v3'], MODELS)
+    ).toEqual(['Other model', 'Русский — GigaAM v3'])
   })
 
   it('shows the id of a model the ASR service does not list', () => {

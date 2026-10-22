@@ -18,7 +18,6 @@ def test_model_ids_and_default():
     """Four models, gigaam-v3 first and default."""
     assert DEFAULT_MODELS == (
         "gigaam-v3",
-        "parakeet-v3",
         "gigaam-multilingual",
         "gigaam-multilingual-punct",
     )
@@ -29,7 +28,6 @@ def test_labels_are_the_russian_ui_names():
     """The labels shown on the website."""
     assert {model.id: model.label for model in MODELS.values()} == {
         "gigaam-v3": "Русский — GigaAM v3",
-        "parakeet-v3": "Русский и английский — Parakeet v3",
         "gigaam-multilingual": "Прежняя модель — GigaAM Multilingual",
         "gigaam-multilingual-punct": "GigaAM Multilingual с пунктуацией",
     }
@@ -66,8 +64,6 @@ def test_backends_follow_the_benchmark_decision():
     assert v3.gpu.code_revision == "3905cd51c3ed4e88c8edf33f3302969ba480a327"
     assert v3.gpu.vram_gb == 1.5
     assert v3.cpu.quantization == "int8"
-    assert RECOGNIZERS["parakeet-v3"].gpu is None
-    assert RECOGNIZERS["parakeet-v3"].cpu.quantization is None
     multilingual = RECOGNIZERS["gigaam-multilingual"]
     assert multilingual.gpu.vram_gb == 3.0
     assert multilingual.gpu.code_repo is None

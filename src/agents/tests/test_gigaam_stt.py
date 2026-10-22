@@ -540,22 +540,24 @@ class Resolver:
 
 
 GIGAAM_V3 = {"model_id": "gigaam-v3", "model_label": "Русский — GigaAM v3"}
-PARAKEET = {
-    "model_id": "parakeet-v3",
-    "model_label": "Русский и английский — Parakeet v3",
+MULTILINGUAL_PUNCT = {
+    "model_id": "gigaam-multilingual-punct",
+    "model_label": "GigaAM Multilingual с пунктуацией",
 }
 
 
 async def test_requests_the_model_of_the_room(fake_vad):
     """Each phrase asks for the resolved model; its id and label reach the final."""
-    asr = FakeASR(answers=[{"text": "раз", **PARAKEET}, {"text": "два", **GIGAAM_V3}])
-    resolver = Resolver("parakeet-v3", "gigaam-v3")
+    asr = FakeASR(
+        answers=[{"text": "раз", **MULTILINGUAL_PUNCT}, {"text": "два", **GIGAAM_V3}]
+    )
+    resolver = Resolver("gigaam-multilingual-punct", "gigaam-v3")
     engine = make_stt(fake_vad, asr, model_resolver=resolver)
 
     events = await run_stream(engine, TWO_PHRASES)
 
     assert [r.url.params.get("model") for r in asr.requests] == [
-        "parakeet-v3",
+        "gigaam-multilingual-punct",
         "gigaam-v3",
     ]
     assert asr.requests[0].url.path == "/v1/transcribe"
@@ -567,7 +569,7 @@ async def test_requests_the_model_of_the_room(fake_vad):
         )
         for ev in finals
     ] == [
-        ("parakeet-v3", "Русский и английский — Parakeet v3"),
+        ("gigaam-multilingual-punct", "GigaAM Multilingual с пунктуацией"),
         ("gigaam-v3", "Русский — GigaAM v3"),
     ]
     assert resolver.calls == 2

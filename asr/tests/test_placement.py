@@ -9,7 +9,7 @@ from asr_service.registry import RECOGNIZERS
 
 from .conftest import fake_gpu, make_settings
 
-ALL = [RECOGNIZERS[key] for key in ("gigaam-v3", "parakeet-v3", "gigaam-multilingual")]
+ALL = [RECOGNIZERS[key] for key in ("gigaam-v3", "gigaam-multilingual")]
 
 
 def devices(placement):
@@ -28,7 +28,6 @@ def test_default_budget_fits_gigaam_v3_only(caplog):
         placement = plan_placement(make_settings(device="cuda"), ALL, fake_gpu(10))
     assert devices(placement) == {
         "gigaam-v3": "cuda:0",
-        "parakeet-v3": "cpu",
         "gigaam-multilingual": "cpu",
     }
     assert placement.budget_bytes == 4 * GIB
@@ -40,13 +39,12 @@ def test_default_budget_fits_gigaam_v3_only(caplog):
 
 
 def test_large_budget_fits_both_gigaam_models():
-    """With 6 GiB both GPU-capable models go to the GPU; Parakeet stays on CPU."""
+    """With 6 GiB both GPU-capable models go to the GPU."""
     placement = plan_placement(
         make_settings(device="cuda", max_vram_gb=6), ALL, fake_gpu(10)
     )
     assert devices(placement) == {
         "gigaam-v3": "cuda:0",
-        "parakeet-v3": "cpu",
         "gigaam-multilingual": "cuda:0",
     }
 

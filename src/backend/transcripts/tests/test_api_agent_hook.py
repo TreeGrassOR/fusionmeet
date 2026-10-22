@@ -428,13 +428,14 @@ def test_agent_hook_models(agent_token, livekit, email_mock):
 
     response = post_hook(
         ready_payload(
-            transcript, models=["gigaam-v3", "parakeet-v3", "gigaam-v3", "custom"]
+            transcript,
+            models=["gigaam-v3", "gigaam-multilingual-punct", "gigaam-v3", "custom"],
         )
     )
 
     assert response.status_code == 200
     transcript.refresh_from_db()
-    assert transcript.asr_models == ["gigaam-v3", "parakeet-v3", "custom"]
+    assert transcript.asr_models == ["gigaam-v3", "gigaam-multilingual-punct", "custom"]
 
 
 @pytest.mark.parametrize("models", [None, [], "missing"])
@@ -462,14 +463,14 @@ def test_agent_hook_models_failed(agent_token, livekit, email_mock):
             "transcript_id": str(transcript.id),
             "room_id": str(transcript.room_id),
             "status": "failed",
-            "models": ["parakeet-v3"],
+            "models": ["gigaam-multilingual-punct"],
         }
     )
 
     assert response.status_code == 200
     transcript.refresh_from_db()
     assert transcript.status == TranscriptStatusChoices.FAILED
-    assert transcript.asr_models == ["parakeet-v3"]
+    assert transcript.asr_models == ["gigaam-multilingual-punct"]
 
 
 @pytest.mark.parametrize(
@@ -494,7 +495,9 @@ def test_agent_hook_models_listed(agent_token, livekit, email_mock):
     """The users of a transcript see the models in the list of transcripts."""
     user = UserFactory()
     transcript = TranscriptFactory(users=[user])
-    post_hook(ready_payload(transcript, models=["gigaam-v3", "parakeet-v3"]))
+    post_hook(
+        ready_payload(transcript, models=["gigaam-v3", "gigaam-multilingual-punct"])
+    )
     client = APIClient()
     client.force_login(user)
 
@@ -502,9 +505,9 @@ def test_agent_hook_models_listed(agent_token, livekit, email_mock):
 
     assert response.status_code == 200
     [item] = response.json()["results"]
-    assert item["models"] == ["gigaam-v3", "parakeet-v3"]
+    assert item["models"] == ["gigaam-v3", "gigaam-multilingual-punct"]
     response = client.get(f"/api/v1.0/transcripts/{transcript.id}/")
-    assert response.json()["models"] == ["gigaam-v3", "parakeet-v3"]
+    assert response.json()["models"] == ["gigaam-v3", "gigaam-multilingual-punct"]
 
 
 # Email

@@ -395,15 +395,6 @@ async def test_health_goes_from_loading_to_ok():
                 "fp16_encoder": False,
             },
             {
-                "id": "parakeet-v3",
-                "status": "ready",
-                "device": "cpu",
-                "model": "repo/parakeet-v3",
-                "revision": "rev-fake",
-                "variant": "parakeet-v3-cpu",
-                "fp16_encoder": False,
-            },
-            {
                 "id": "gigaam-multilingual",
                 "status": "ready",
                 "device": "cpu",

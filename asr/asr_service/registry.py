@@ -109,25 +109,6 @@ RECOGNIZERS: dict[str, Recognizer] = {
             ),
         ),
         Recognizer(
-            key="parakeet-v3",
-            # FP32 only: the int8 encoder loses about 3 points of WER and writes
-            # Latin script for short Russian phrases.
-            cpu=OnnxBackend(
-                model_type="nemo-parakeet-tdt-0.6b-v3",
-                repo="istupakov/parakeet-tdt-0.6b-v3-onnx",
-                revision="8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
-                files=(
-                    "config.json",
-                    "vocab.txt",
-                    "encoder-model.onnx",
-                    "encoder-model.onnx.data",
-                    "decoder_joint-model.onnx",
-                ),
-                quantization=None,
-                variant="tdt-0.6b-v3-onnx-fp32",
-            ),
-        ),
-        Recognizer(
             key="gigaam-multilingual",
             gpu=TorchBackend(
                 repo=GIGAAM_MULTILINGUAL_REPO,
@@ -160,10 +141,6 @@ PUNCTUATORS: dict[str, Punctuator] = {
     ),
 }
 
-_PARAKEET_LANGUAGES = (
-    *("ru", "en", "uk", "bg", "cs", "da", "de", "el", "es", "et", "fi", "fr", "hr"),
-    *("hu", "it", "lt", "lv", "mt", "nl", "pl", "pt", "ro", "sk", "sl", "sv"),
-)
 _GIGAAM_MULTILINGUAL_LANGUAGES = ("ru", "en", "kk", "ky", "uz")
 
 MODELS: dict[str, ModelSpec] = {
@@ -179,17 +156,6 @@ MODELS: dict[str, ModelSpec] = {
             languages=("ru",),
             punctuation=True,
             recognizer="gigaam-v3",
-        ),
-        ModelSpec(
-            id="parakeet-v3",
-            label="Русский и английский — Parakeet v3",
-            description=(
-                "Для встреч на английском или на двух языках. Язык определяется "
-                "автоматически; русский распознаётся немного хуже, чем в GigaAM v3."
-            ),
-            languages=_PARAKEET_LANGUAGES,
-            punctuation=True,
-            recognizer="parakeet-v3",
         ),
         ModelSpec(
             id="gigaam-multilingual",

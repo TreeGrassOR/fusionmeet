@@ -11,7 +11,6 @@ published.
 | id | Label (website) | What it is | Where it runs |
 |---|---|---|---|
 | `gigaam-v3` (default) | «Русский — GigaAM v3» | [GigaAM-v3](https://huggingface.co/ai-sage/GigaAM-v3) `e2e_rnnt`: Russian only, with punctuation, capitals and digits. English speech comes out as garbage. | GPU: torch, fp16 encoder, batched. CPU: [ONNX int8](https://huggingface.co/istupakov/gigaam-v3-onnx), one clip at a time. |
-| `parakeet-v3` | «Русский и английский — Parakeet v3» | [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3): 25 European languages, detected automatically (no language parameter), with punctuation. Russian is slightly worse than GigaAM-v3. | CPU only: [ONNX fp32](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx) (the int8 encoder loses about 3 points of WER). |
 | `gigaam-multilingual` | «Прежняя модель — GigaAM Multilingual» | [GigaAM Multilingual](https://huggingface.co/ai-sage/GigaAM-Multilingual) `large_ctc`, the model of the previous release: lowercase, no punctuation; Russian, Kazakh, Kyrgyz, Uzbek, English. | GPU: torch, fp16 encoder, batched. CPU: [ONNX int8](https://huggingface.co/istupakov/gigaam-multilingual-large-ctc-onnx). |
 | `gigaam-multilingual-punct` | «GigaAM Multilingual с пунктуацией» | The text of `gigaam-multilingual` passed through the [xlm-roberta punctuation and true-casing model](https://huggingface.co/1-800-BAD-CODE/xlm-roberta_punctuation_fullstop_truecase). | The recogniser of `gigaam-multilingual` (no second copy) plus the punctuation model on the CPU (ONNX fp32). |
 
@@ -36,13 +35,12 @@ download size:
 | id | RAM | Load time | Download (CPU) | Download (GPU) | VRAM (estimate) |
 |---|---|---|---|---|---|
 | `gigaam-v3` | 0.5 GB | 3.6 s | 0.22 GB | 0.45 GB | 1.5 GiB |
-| `parakeet-v3` | 2.7 GB | 10.9 s | 2.5 GB | — | — |
 | `gigaam-multilingual` | 1.1 GB | 3.9 s | 0.59 GB | 2.3 GB | 3.0 GiB |
 | `gigaam-multilingual-punct` | +1.3 GB (peak +1.8 GB while loading) | +11.5 s | +1.1 GB | +1.1 GB | — |
 
-All four on the CPU: 6.1 GB resident, 6.7 GB peak while loading. With the defaults on
-a GPU (`gigaam-v3` on the GPU, the rest on the CPU), the first start downloads about
-4.7 GB. The VRAM figures are estimates (the budget check uses them, see "GPU and
+All three on the CPU: about 3.4 GB resident, 4.0 GB peak while loading. With the
+defaults on a GPU (`gigaam-v3` on the GPU, the rest on the CPU), the first start
+downloads about 2.1 GB. The VRAM figures are estimates (the budget check uses them, see "GPU and
 CPU"); override them with `ASR_VRAM_GB_<ID>` once measured.
 
 ## API
@@ -75,13 +73,13 @@ CPU"); override them with `ASR_VRAM_GB_<ID>` once measured.
     detail gives the error; no `Retry-After`), or `ASR_MAX_QUEUE` requests are
     already waiting for it (`Retry-After: 1`).
   - `500`: inference failed.
-- The text is cleaned up: `<...>` tokens (such as Parakeet's `<unk>`) are removed,
+- The text is cleaned up: `<...>` tokens (such as `<unk>`) are removed,
   whitespace is normalised, and output without any letter or digit (a bare `.`) is
   returned as `""`.
 
 ```sh
 curl -H "Authorization: Bearer $ASR_API_KEY" -H "Content-Type: audio/wav" \
-     --data-binary @phrase.wav "http://asr:8000/v1/transcribe?model=parakeet-v3"
+     --data-binary @phrase.wav "http://asr:8000/v1/transcribe?model=gigaam-multilingual-punct"
 ```
 
 ### `GET /v1/models`
@@ -133,7 +131,7 @@ Weights are downloaded once into `HF_HOME=/models` (mount a volume there), by co
 SHA, so later starts load them from the volume without any request to the Hub. The
 torch weights use the Hugging Face cache (`/models/hub`). The ONNX files are plain
 files in `/models/onnx/<owner>--<name>/<revision>/`: onnxruntime refuses external
-weights (`encoder-model.onnx.data`) that resolve outside the directory of their
+weights (`*.onnx.data`) that resolve outside the directory of their
 `.onnx` file, which is what the symlinks of the Hugging Face cache do. Set `HF_TOKEN`
 if the Hub rate-limits the first download.
 
@@ -143,15 +141,14 @@ With `ASR_DEVICE=cuda` (the default) the service does the following at startup:
 
 1. It reads the free and total memory of the GPU with `torch.cuda.mem_get_info()`
    (this creates the CUDA context) and sets `budget = min(ASR_MAX_VRAM_GB, free)`.
-   When no enabled model has a GPU backend (for example `ASR_MODELS=parakeet-v3`),
-   it skips this: torch is not imported and the GPU is not touched.
+   When no enabled model has a GPU backend, it skips this: torch is not imported
+   and the GPU is not touched.
 2. It places the models that have a GPU backend (`gigaam-v3`, `gigaam-multilingual`)
    on the GPU in priority order (the default model first, then `ASR_MODELS` order)
    while their VRAM needs (`ASR_VRAM_GB_<ID>`) fit in what is left of the budget.
    A model that does not fit runs on the CPU, with a `WARNING` that says how much it
    needs and how much is left. With the defaults (4 GiB) `gigaam-v3` (1.5 GiB) goes
-   to the GPU and `gigaam-multilingual` (3.0 GiB) to the CPU. Parakeet always runs on
-   the CPU.
+   to the GPU and `gigaam-multilingual` (3.0 GiB) to the CPU.
 3. If CUDA is not usable (no GPU visible, torch not working), every model runs on the
    CPU with a `WARNING`; the service no longer exits.
 4. It calls `torch.cuda.set_per_process_memory_fraction(budget / total)`, so
@@ -202,7 +199,7 @@ An empty variable means its default.
 | Variable | Default | Meaning |
 |---|---|---|
 | `ASR_API_KEY` | (required) | Shared Bearer key. The service does not start without it. |
-| `ASR_MODELS` | `gigaam-v3,parakeet-v3,gigaam-multilingual,gigaam-multilingual-punct` | Enabled models, comma-separated (order of `/v1/models` and of loading) |
+| `ASR_MODELS` | `gigaam-v3,gigaam-multilingual,gigaam-multilingual-punct` | Enabled models, comma-separated (order of `/v1/models` and of loading) |
 | `ASR_DEFAULT_MODEL` | `gigaam-v3` | Model of requests without `?model=`; must be enabled |
 | `ASR_DEVICE` | `cuda` | `cuda`, `cuda:<n>` or `cpu` (everything on the CPU) |
 | `ASR_MAX_VRAM_GB` | `4` | Upper limit of this process's VRAM budget (GiB) |

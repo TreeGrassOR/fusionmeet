@@ -24,8 +24,13 @@
 
 # Web interface and API: nginx router inside the frontend container
 # (SPA, /api, /admin, /static -> backend, /media/recordings/ -> Garage).
-{$MEET_HOST} {
+# The other names of the site (MEET_REDIRECT_HOSTS, space separated: www, the
+# previous address) get their own certificate and a permanent redirect to
+# MEET_HOST, so old links keep working.
+{$MEET_HOST} {$MEET_REDIRECT_HOSTS} {
 	import acme_http01
+	@other not host {$MEET_HOST}
+	redir @other https://{$MEET_HOST}{uri} permanent
 	reverse_proxy frontend:8083
 }
 

@@ -39,7 +39,7 @@ def download_snapshot(repo: str, revision: str, files: Sequence[str]) -> Path:
     onnx-asr has no revision parameter, so the files are fetched here and onnx-asr
     reads them from the returned directory. They are plain files in
     ``$HF_HOME/onnx/<owner>--<name>/<revision>``, not the symlinks of the Hugging
-    Face cache: onnxruntime refuses external weights (``encoder-model.onnx.data``)
+    Face cache: onnxruntime refuses external weights (``*.onnx.data``)
     that resolve outside the directory of their ``.onnx`` file, and in the cache
     every file resolves to its own blob. Later starts read them without any request
     to the Hub.

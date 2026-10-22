@@ -65,7 +65,9 @@ def test_models_room_transcription_settings_one_per_room():
     assert room.transcription_settings.asr_model == "gigaam-v3"
     assert RoomTranscriptionSettings.objects.get().pk == room.pk
     with pytest.raises(ValidationError):
-        RoomTranscriptionSettings(room=room, asr_model="parakeet-v3").validate_unique()
+        RoomTranscriptionSettings(
+            room=room, asr_model="gigaam-multilingual-punct"
+        ).validate_unique()
 
 
 def test_models_room_transcription_settings_room_cascade():
