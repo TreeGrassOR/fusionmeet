@@ -527,6 +527,103 @@ def test_list_calls_has_recording_failed_or_outside():
     assert list_calls(user).json()["results"][0]["has_recording"] is False
 
 
+def test_list_calls_consecutive_calls():
+    """A transcript or recording started at the end of a call is not shown
+    with the next call of the room (CALLS-6).
+    """
+    user = UserFactory()
+    room = RoomFactory()
+    first_start = timezone.now().replace(microsecond=0) - timedelta(hours=2)
+    first = CallSessionFactory(
+        room=room,
+        started_at=first_start,
+        ended_at=first_start + timedelta(minutes=30),
+    )
+    second = CallSessionFactory(
+        room=room, started_at=first.ended_at + timedelta(seconds=20)
+    )
+    CallParticipantFactory(session=second, user=user)
+    TranscriptFactory(
+        room=room,
+        started_at=first.ended_at - timedelta(seconds=5),
+        status=TranscriptStatusChoices.READY,
+    )
+    recording = RecordingFactory(room=room, users=[user])
+    type(recording).objects.filter(pk=recording.pk).update(created_at=first.ended_at)
+
+    item = list_calls(user).json()["results"][0]
+
+    assert item["id"] == str(second.id)
+    assert item["has_transcript"] is False
+    assert item["has_recording"] is False
+
+
+# Calls whose room_finished was lost
+
+
+def test_list_calls_closes_calls_over(livekit):
+    """Open calls that LiveKit no longer shows are listed as ended; live and
+    recent calls stay open (CALLS-4).
+    """
+    user = UserFactory()
+    now = timezone.now().replace(microsecond=0)
+    over = CallSessionFactory(started_at=now - timedelta(days=2))
+    CallParticipantFactory(
+        session=over, user=user, left_at=over.started_at + timedelta(hours=1)
+    )
+    live = CallSessionFactory(started_at=now - timedelta(hours=1))
+    CallParticipantFactory(session=live, user=user)
+    recent = CallSessionFactory(started_at=now - timedelta(minutes=5))
+    CallParticipantFactory(session=recent, user=user)
+    livekit.start_room(live.room, sid=live.livekit_sid)
+
+    items = {item["id"]: item for item in list_calls(user).json()["results"]}
+
+    assert items[str(over.id)]["is_active"] is False
+    assert items[str(over.id)]["ended_at"] == iso(over.started_at + timedelta(hours=1))
+    assert items[str(live.id)]["is_active"] is True
+    assert items[str(recent.id)]["is_active"] is True
+    # Recent calls are not checked
+    assert livekit.requests == [
+        ("list_rooms", sorted([str(over.room_id), str(live.room_id)]))
+    ]
+
+    # Checked again a few minutes later at the earliest
+    list_calls(user)
+    assert len(livekit.requests) == 1
+
+
+def test_list_calls_livekit_unavailable(livekit):
+    """The list is shown as recorded when LiveKit does not answer."""
+    user = UserFactory()
+    session = CallSessionFactory()
+    CallParticipantFactory(session=session, user=user)
+
+    response = list_calls(user)
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["is_active"] is True
+    assert len(livekit.requests) == 1
+
+
+def test_list_calls_query_count_checked_with_livekit(
+    livekit, django_assert_num_queries
+):
+    """Checking open calls with LiveKit adds no query while they are live."""
+    user = UserFactory()
+    for _index in range(3):
+        session = CallSessionFactory()
+        CallParticipantFactory(session=session, user=user)
+        livekit.start_room(session.room, sid=session.livekit_sid)
+
+    client = logged_in_client(user)
+    with django_assert_num_queries(5):
+        response = client.get(LIST_URL)
+
+    assert len(response.json()["results"]) == 3
+    assert len(livekit.requests) == 1
+
+
 def test_list_calls_room_access_role_changes():
     """Visibility follows the current room roles."""
     user = UserFactory()

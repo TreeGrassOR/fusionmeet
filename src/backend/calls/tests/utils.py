@@ -1,5 +1,7 @@
 """Shared helpers for tests in the calls application."""
 
+# pylint: disable=no-member
+
 import base64
 import hashlib
 import json
@@ -9,6 +11,7 @@ from datetime import timezone as dt_timezone
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 
+import aiohttp
 from livekit import api
 from rest_framework.test import APIClient
 
@@ -125,3 +128,103 @@ def logged_in_client(user):
     client = APIClient()
     client.force_login(user)
     return client
+
+
+class FakeLiveKit:
+    """LiveKit as the calls application asks it: the rooms live now and the
+    participants connected to them.
+
+    It does not answer until a room is started: the calls of the tests then
+    stay as they are recorded.
+    """
+
+    def __init__(self):
+        self.available = False
+        self.rooms = {}
+        self.participants = {}
+        self.requests = []
+
+    def start_room(self, room, *, sid="RM_first", created_at=CALL_START):
+        """Make a LiveKit room instance live for a room."""
+        self.available = True
+        self.rooms[str(room.id)] = api.Room(
+            sid=sid,
+            name=str(room.id),
+            creation_time=epoch_seconds(created_at),
+            creation_time_ms=epoch_milliseconds(created_at),
+        )
+
+    def stop_room(self, room):
+        """Close the LiveKit room instance of a room."""
+        self.rooms.pop(str(room.id), None)
+        self.participants = {
+            key: value
+            for key, value in self.participants.items()
+            if key[0] != str(room.id)
+        }
+
+    def connect(  # noqa: PLR0913  # pylint: disable=too-many-arguments
+        self,
+        room,
+        identity,
+        *,
+        name="Иван Петров",
+        is_authenticated=False,
+        kind=api.ParticipantInfo.STANDARD,
+        joined_at=CALL_START,
+    ):
+        """Connect a participant to the live room instance of a room."""
+        self.available = True
+        self.participants[(str(room.id), identity)] = api.ParticipantInfo(
+            sid=f"PA_{identity}",
+            identity=identity,
+            name=name,
+            kind=kind,
+            state=api.ParticipantInfo.ACTIVE,
+            joined_at=epoch_seconds(joined_at),
+            joined_at_ms=epoch_milliseconds(joined_at),
+            attributes={"is_authenticated": "true" if is_authenticated else "false"},
+        )
+
+    def disconnect(self, room, identity):
+        """Disconnect a participant from a room."""
+        self.participants.pop((str(room.id), identity), None)
+
+    def _answer(self):
+        if not self.available:
+            raise aiohttp.ClientConnectionError("LiveKit is down")
+
+    async def list_rooms(self, request):
+        """RoomService.ListRooms"""
+        self.requests.append(("list_rooms", sorted(request.names)))
+        self._answer()
+        return api.ListRoomsResponse(
+            rooms=[
+                room
+                for name, room in self.rooms.items()
+                if not request.names or name in request.names
+            ]
+        )
+
+    async def get_participant(self, request):
+        """RoomService.GetParticipant"""
+        self.requests.append(("get_participant", request.room, request.identity))
+        self._answer()
+        participant = self.participants.get((request.room, request.identity))
+        if participant is None:
+            raise api.TwirpError("not_found", "participant does not exist", status=404)
+        return participant
+
+    def client(self, *args, **kwargs):  # pylint: disable=unused-argument
+        """A LiveKit API client that asks this fake."""
+        fake = self
+
+        class Client:
+            """LiveKitAPI"""
+
+            room = fake
+
+            async def aclose(self):
+                """Close the client."""
+
+        return Client()

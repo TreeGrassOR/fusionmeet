@@ -99,10 +99,8 @@ class Migration(migrations.Migration):
                 (
                     "livekit_sid",
                     models.CharField(
-                        blank=True,
-                        help_text="Set by the LiveKit webhooks, empty while only chat messages are known.",
+                        help_text="Sid of the LiveKit room instance, as LiveKit gives it.",
                         max_length=64,
-                        null=True,
                         unique=True,
                         verbose_name="LiveKit room sid",
                     ),
@@ -306,7 +304,7 @@ class Migration(migrations.Migration):
                 (
                     "client_id",
                     models.CharField(
-                        help_text="Id of the LiveKit text stream, the same for every client.",
+                        help_text="Id of the LiveKit text stream, the same for every client: unique per sender only.",
                         max_length=64,
                         verbose_name="Client id",
                     ),
@@ -397,7 +395,8 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="chatmessage",
             constraint=models.UniqueConstraint(
-                fields=("session", "client_id"), name="unique_chat_message_client_id"
+                fields=("session", "sender_identity", "client_id"),
+                name="unique_chat_message_sender_client_id",
             ),
         ),
     ]

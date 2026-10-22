@@ -98,7 +98,7 @@ describe('withRetries', () => {
 
   it('does not retry a refused message', async () => {
     const sleep = vi.fn(() => Promise.resolve())
-    for (const status of [400, 401, 403, 404, 409]) {
+    for (const status of [400, 401, 403, 404, 408, 409, 410, 413, 422]) {
       const request = vi.fn(() => Promise.reject(new ApiError(status, {})))
       await expect(withRetries(request, { sleep })).rejects.toBeInstanceOf(
         ApiError
@@ -106,6 +106,29 @@ describe('withRetries', () => {
       expect(request).toHaveBeenCalledTimes(1)
     }
     expect(sleep).not.toHaveBeenCalled()
-    expect(isRetryableError(new ApiError(500, undefined))).toBe(true)
+  })
+
+  it('does not retry other errors', async () => {
+    const sleep = vi.fn(() => Promise.resolve())
+    const error = new Error('No LiveKit token')
+    const request = vi.fn(() => Promise.reject(error))
+    await expect(withRetries(request, { sleep })).rejects.toBe(error)
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(sleep).not.toHaveBeenCalled()
+  })
+})
+
+describe('isRetryableError', () => {
+  it('retries network errors, 5xx and 429 only', () => {
+    expect(isRetryableError(new TypeError('Failed to fetch'))).toBe(true)
+    for (const status of [500, 502, 503, 504, 429]) {
+      expect(isRetryableError(new ApiError(status, undefined))).toBe(true)
+    }
+    for (let status = 400; status < 500; status++) {
+      if (status === 429) continue
+      expect(isRetryableError(new ApiError(status, undefined))).toBe(false)
+    }
+    expect(isRetryableError(new Error('No LiveKit token'))).toBe(false)
+    expect(isRetryableError(new SyntaxError('Unexpected token'))).toBe(false)
   })
 })

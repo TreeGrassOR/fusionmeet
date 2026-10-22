@@ -2,19 +2,24 @@
 
 # pylint: disable=unused-argument
 
+import asyncio
 import json
+import uuid
 from datetime import timedelta
 from unittest import mock
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
 
+import aiohttp
 import pytest
+from livekit.api import TwirpError
 from rest_framework.test import APIClient
 
 from core.factories import RoomFactory, UserFactory
 
-from calls import services
+from calls import room_service, services
 from calls.factories import (
     CallParticipantFactory,
     CallSessionFactory,
@@ -43,6 +48,16 @@ def test_from_timestamps():
     assert services.from_milliseconds(
         epoch_milliseconds(CALL_START) + 123
     ) == CALL_START + timedelta(milliseconds=123)
+
+
+def test_call_session_requires_sid():
+    """Every call has the sid LiveKit gave it: no call is opened without
+    LiveKit, so none is adopted later by an unrelated call (CALLS-3).
+    """
+    with pytest.raises(ValidationError):
+        CallSessionFactory(livekit_sid=None)
+    with pytest.raises(ValidationError):
+        CallSessionFactory(livekit_sid="")
 
 
 def test_ensure_session_retries_after_concurrent_creation():
@@ -158,25 +173,13 @@ def test_record_join_completes_participant_known_from_chat():
     assert participant.last_joined_at == joined_at
 
 
-def test_record_sender_concurrent_join():
-    """A sender recorded concurrently by its join event is not duplicated."""
-    session = CallSessionFactory()
-
-    with mock.patch.object(
-        CallParticipant.objects, "create", side_effect=IntegrityError("duplicate")
-    ):
-        services.record_sender(
-            session, identity="guest-1", user=None, name="Гость", at=timezone.now()
-        )
-
-    assert not CallParticipant.objects.exists()
-
-
-@pytest.mark.parametrize("identity, conflict", [("guest-1", False), ("guest-2", True)])
-def test_store_chat_message_concurrent_post(identity, conflict):
+def test_store_chat_message_concurrent_post(livekit):
     """A message posted twice at the same time is stored once."""
     room = RoomFactory()
     session = CallSessionFactory(room=room)
+    livekit.start_room(room, sid=session.livekit_sid)
+    livekit.connect(room, "guest-1")
+    CallParticipantFactory(session=session, identity="guest-1")
     stored = ChatMessageFactory(
         session=session, client_id="same-id", sender_identity="guest-1"
     )
@@ -188,31 +191,25 @@ def test_store_chat_message_concurrent_post(identity, conflict):
             return ChatMessage.objects.none()
         return real_filter(*args, **kwargs)
 
-    def store():
-        return services.store_chat_message(
+    with mock.patch.object(ChatMessage.objects, "filter", side_effect=filter_messages):
+        result = services.store_chat_message(
             room,
-            identity=identity,
-            user=None,
-            name="Гость",
+            identity="guest-1",
             client_id="same-id",
             text="Привет",
             sent_at=timezone.now(),
             room_sid=session.livekit_sid,
         )
 
-    with mock.patch.object(ChatMessage.objects, "filter", side_effect=filter_messages):
-        if conflict:
-            with pytest.raises(services.ChatMessageConflictError):
-                store()
-        else:
-            assert store() == (stored, False)
-
+    assert result == (stored, False)
     assert ChatMessage.objects.count() == 1
 
 
-def test_store_chat_message_unexpected_integrity_error():
+def test_store_chat_message_unexpected_integrity_error(livekit):
     """An integrity error that is not a duplicate is raised."""
     room = RoomFactory()
+    livekit.start_room(room)
+    livekit.connect(room, "guest-1")
 
     with (
         mock.patch.object(
@@ -223,13 +220,140 @@ def test_store_chat_message_unexpected_integrity_error():
         services.store_chat_message(
             room,
             identity="guest-1",
-            user=None,
-            name="Гость",
             client_id="an-id",
             text="Привет",
             sent_at=timezone.now(),
             room_sid=None,
         )
+
+
+# LiveKit
+
+
+def test_room_service_requests(livekit):
+    """LiveKit is asked for the rooms by name, and for a participant."""
+    room = RoomFactory()
+    other_room = RoomFactory()
+    livekit.start_room(room, sid="RM_first")
+    livekit.start_room(RoomFactory(), sid="RM_unrelated")
+    livekit.connect(room, "guest-1", name="Гость")
+
+    live_rooms = room_service.get_live_rooms([room.id, other_room.id, room.id])
+    participant = room_service.get_participant(room.id, "guest-1")
+    absent = room_service.get_participant(room.id, "guest-2")
+
+    assert {name: live.sid for name, live in live_rooms.items()} == {
+        str(room.id): "RM_first"
+    }
+    assert room_service.get_live_room(other_room.id) is None
+    assert participant.name == "Гость"
+    assert absent is None
+    assert livekit.requests[0] == (
+        "list_rooms",
+        sorted([str(room.id), str(other_room.id)]),
+    )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        aiohttp.ClientConnectionError("refused"),
+        TimeoutError(),
+        TwirpError("unavailable", "boom", status=503),
+    ],
+)
+def test_room_service_unavailable(error):
+    """LiveKit errors other than an absent participant are all one error."""
+    client = mock.MagicMock()
+    client.room.list_rooms = mock.AsyncMock(side_effect=error)
+    client.room.get_participant = mock.AsyncMock(side_effect=error)
+    client.aclose = mock.AsyncMock()
+
+    with mock.patch("core.utils.create_livekit_client", return_value=client):
+        with pytest.raises(room_service.LiveKitUnavailableError):
+            room_service.get_live_rooms([uuid.uuid4()])
+        with pytest.raises(room_service.LiveKitUnavailableError):
+            room_service.get_participant(uuid.uuid4(), "guest-1")
+
+    assert client.aclose.await_count == 2
+
+
+def test_room_service_timeout():
+    """A LiveKit that does not answer is given up quickly."""
+
+    async def never_answers(*args):
+        await asyncio.sleep(60)
+
+    client = mock.MagicMock()
+    client.room.list_rooms = never_answers
+    client.aclose = mock.AsyncMock()
+
+    with (
+        mock.patch("core.utils.create_livekit_client", return_value=client),
+        mock.patch.object(room_service, "LIVEKIT_TIMEOUT_SECONDS", 0.01),
+        pytest.raises(room_service.LiveKitUnavailableError),
+    ):
+        room_service.get_live_rooms([uuid.uuid4()])
+
+
+def test_reconcile_sessions_closes_calls_over(livekit):
+    """Open calls that LiveKit shows over are closed at their estimated end;
+    the live ones and the recent ones are left as they are (CALLS-4).
+    """
+    now = timezone.now().replace(microsecond=0)
+    over = CallSessionFactory(started_at=now - timedelta(hours=3))
+    CallParticipantFactory(session=over, left_at=now - timedelta(hours=2))
+    replaced = CallSessionFactory(started_at=now - timedelta(hours=3))
+    CallParticipantFactory(
+        session=replaced, last_joined_at=now - timedelta(hours=2, minutes=30)
+    )
+    live = CallSessionFactory(started_at=now - timedelta(hours=1))
+    recent = CallSessionFactory(started_at=now - timedelta(minutes=5))
+    ended = CallSessionFactory(
+        started_at=now - timedelta(hours=3), ended_at=now - timedelta(hours=2)
+    )
+    next_start = now - timedelta(minutes=30)
+    livekit.start_room(replaced.room, sid="RM_next", created_at=next_start)
+    livekit.start_room(live.room, sid=live.livekit_sid)
+
+    closed = services.reconcile_sessions([over, replaced, live, recent, ended])
+
+    assert {session.pk for session in closed} == {over.pk, replaced.pk}
+    over.refresh_from_db()
+    assert over.ended_at == now - timedelta(hours=2)
+    replaced.refresh_from_db()
+    # Its participant never left: the call ended after it last joined
+    assert replaced.ended_at == now - timedelta(hours=2, minutes=30)
+    assert replaced.participants.get().left_at == replaced.ended_at
+    for session in (live, recent):
+        session.refresh_from_db()
+        assert session.ended_at is None
+    assert livekit.requests == [
+        ("list_rooms", sorted(str(s.room_id) for s in (over, replaced, live)))
+    ]
+
+
+def test_reconcile_sessions_throttled(livekit):
+    """An open call is checked at most every few minutes."""
+    session = CallSessionFactory()
+    livekit.start_room(session.room, sid=session.livekit_sid)
+
+    services.reconcile_sessions([session])
+    services.reconcile_sessions([session])
+
+    assert len(livekit.requests) == 1
+    assert services.RECONCILE_INTERVAL_SECONDS == 300
+    assert services.RECONCILE_AFTER == timedelta(minutes=10)
+
+
+def test_reconcile_sessions_livekit_unavailable(livekit):
+    """Nothing is closed when LiveKit does not answer."""
+    session = CallSessionFactory()
+
+    assert not services.reconcile_sessions([session])
+
+    session.refresh_from_db()
+    assert session.ended_at is None
 
 
 def test_webhook_invalid_filter_regex(settings):

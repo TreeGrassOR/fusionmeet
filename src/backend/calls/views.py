@@ -41,7 +41,7 @@ from core.models import Room
 
 from transcripts.models import TranscriptFormat
 
-from . import queries, serializers, services
+from . import queries, room_service, serializers, services
 from .models import CallRoomTitle, CallUserState, ChatMessage
 
 logger = getLogger(__name__)
@@ -72,6 +72,26 @@ class ChatMessageRateThrottle(MonitoredThrottleMixin, throttling.SimpleRateThrot
         if not identity:
             return None
         return self.cache_format % {"scope": self.scope, "ident": identity}
+
+
+class ChatMessageRoomRateThrottle(
+    MonitoredThrottleMixin, throttling.SimpleRateThrottle
+):
+    """Limit the chat messages posted in a room, whoever posts them.
+
+    Guests get a new identity with each token they fetch: the limit per
+    identity alone does not bound them.
+    """
+
+    scope = "call_chat_messages_room"
+    rate = "600/minute"
+
+    def get_cache_key(self, request, view):
+        """Throttle per room."""
+        room_id = view.kwargs.get("pk")
+        if not room_id:
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": room_id}
 
 
 class CallsLiveKitWebhookView(CallsHistoryEnabledMixin, views.APIView):
@@ -105,17 +125,21 @@ class RoomChatMessagesView(CallsHistoryEnabledMixin, generics.GenericAPIView):
     """Store the chat messages a participant sends in a call.
 
     The sender's client posts each message it sent, with its LiveKit token:
-    a participant can only post as itself, in the room of its token. Guests
-    post too.
+    a participant can only post as itself, in the room of its token, while
+    LiveKit shows it connected to the call. Guests post too.
+
+    Answers: 201 stored, 200 already stored (or, with `"stored": false`, sent
+    to a call that ended too long ago), 403 sender not connected, 409 no live
+    call of the room matches, 503 LiveKit did not answer (worth a retry).
     """
 
     authentication_classes = [LiveKitTokenAuthentication]
     permission_classes = [HasLiveKitRoomAccess]
-    throttle_classes = [ChatMessageRateThrottle]
+    throttle_classes = [ChatMessageRateThrottle, ChatMessageRoomRateThrottle]
     serializer_class = serializers.ChatMessageCreateSerializer
 
     def post(self, request, pk):
-        """Store one message: 201 when stored, 200 when already stored."""
+        """Store one message."""
         room = get_object_or_404(Room.all_objects, pk=pk)
         self.check_object_permissions(request, room)
         ensure_room_not_deleted(room)
@@ -128,17 +152,27 @@ class RoomChatMessagesView(CallsHistoryEnabledMixin, generics.GenericAPIView):
             message, created = services.store_chat_message(
                 room,
                 identity=request.auth.identity,
-                user=services.sender_user_of(request),
-                name=services.display_name_of(request, data.get("name")),
                 client_id=data["id"],
                 text=data["text"],
                 sent_at=services.from_milliseconds(data["sent_at"]) or timezone.now(),
                 room_sid=data.get("room_sid"),
             )
-        except services.ChatMessageConflictError:
+        except services.CallEndedError:
+            return drf_response.Response({"stored": False})
+        except services.NoLiveCallError:
             return drf_response.Response(
-                {"error": "A message with this id was sent by another participant."},
+                {"detail": "No live call of this room matches the message."},
                 status=drf_status.HTTP_409_CONFLICT,
+            )
+        except services.SenderNotConnectedError as error:
+            raise drf_exceptions.PermissionDenied(
+                "You are not connected to this call."
+            ) from error
+        except room_service.LiveKitUnavailableError as error:
+            logger.warning("Could not check a chat message with LiveKit: %s", error)
+            return drf_response.Response(
+                {"detail": "The call could not be checked, try again later."},
+                status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         return drf_response.Response(
@@ -211,6 +245,22 @@ class CallViewSet(
         if self.action == "retrieve":
             return serializers.CallDetailSerializer
         return super().get_serializer_class()
+
+    def list(self, request, *args, **kwargs):
+        """A page of calls, the ones LiveKit shows are over closed first."""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if services.reconcile_sessions(page):
+            page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        """A call, closed first when LiveKit shows it is over."""
+        session = self.get_object()
+        if services.reconcile_sessions([session]):
+            session = self.get_object()
+        return drf_response.Response(self.get_serializer(session).data)
 
     @decorators.action(detail=True, methods=["get"])
     def messages(self, request, pk=None):  # pylint: disable=unused-argument

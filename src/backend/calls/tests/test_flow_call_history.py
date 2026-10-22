@@ -29,15 +29,17 @@ from transcripts.models import TranscriptStatusChoices
 pytestmark = pytest.mark.django_db
 
 
-def test_flow_call_history():
+def test_flow_call_history(livekit):  # noqa: PLR0915  # pylint: disable=too-many-locals,too-many-statements
     """Two users and a guest talk in a call that is transcribed: afterwards both
     users find the call with its chat and transcript.
     """
     owner = UserFactory(full_name="Иван Петров")
     colleague = UserFactory(full_name="Мария Смирнова")
     room = RoomFactory(name="abc-defg-hij", users=[(owner, RoleChoices.OWNER)])
-    start = timezone.now().replace(microsecond=0) - timedelta(minutes=40)
+    now = timezone.now().replace(microsecond=0)
+    start = now - timedelta(minutes=40)
     sid = "RM_flow"
+    livekit.start_room(room, sid=sid, created_at=start)
 
     def hook(event, at, **kwargs):
         response = post_webhook(
@@ -55,6 +57,13 @@ def test_flow_call_history():
     ]
     for index, (identity, name, is_authenticated) in enumerate(people):
         joined_at = start + timedelta(seconds=10 * (index + 1))
+        livekit.connect(
+            room,
+            identity,
+            name=name,
+            is_authenticated=is_authenticated,
+            joined_at=joined_at,
+        )
         hook(
             "participant_joined",
             joined_at,
@@ -96,7 +105,7 @@ def test_flow_call_history():
             {
                 "id": f"message-{index}",
                 "text": text,
-                "sent_at": epoch_milliseconds(start + timedelta(minutes=5 + index)),
+                "sent_at": epoch_milliseconds(now - timedelta(seconds=30 - 10 * index)),
                 "room_sid": sid,
                 "name": None,
             },
@@ -104,7 +113,8 @@ def test_flow_call_history():
         )
         assert response.status_code == 201
 
-    end = start + timedelta(minutes=30)
+    livekit.stop_room(room)
+    end = now + timedelta(seconds=10)
     transcript.status = TranscriptStatusChoices.READY
     transcript.ended_at = end
     transcript.json_key = f"transcriptions/{transcript.id}/transcript.json"
@@ -112,7 +122,7 @@ def test_flow_call_history():
     # The colleague leaves before the end, the others when the call ends
     hook(
         "participant_left",
-        start + timedelta(minutes=6),
+        now - timedelta(seconds=15),
         participant=participant_info(
             colleague.sub, joined_at=start + timedelta(seconds=20)
         ),
