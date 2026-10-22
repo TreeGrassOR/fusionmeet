@@ -334,6 +334,7 @@ class Base(Configuration):
         "core",
         "demo",
         "transcripts",
+        "calls",
         "drf_spectacular",
         # Third party apps
         "corsheaders",
@@ -1130,6 +1131,23 @@ class Base(Configuration):
         60,
         environ_name="TRANSCRIPTION_MODELS_CACHE_SECONDS",
         environ_prefix=None,
+    )
+
+    # Call history (see calls app): calls, their chat messages and transcripts
+    CALLS_HISTORY_ENABLED = values.BooleanValue(
+        False, environ_name="CALLS_HISTORY_ENABLED", environ_prefix=None
+    )
+    # The participants of a call can read its transcripts, not only the users
+    # given access to them (the starter and the room owners/administrators)
+    CALLS_TRANSCRIPTS_VISIBLE_TO_PARTICIPANTS = values.BooleanValue(
+        True,
+        environ_name="CALLS_TRANSCRIPTS_VISIBLE_TO_PARTICIPANTS",
+        environ_prefix=None,
+    )
+    # Room owners and administrators see the calls of their rooms, even the
+    # ones they did not attend
+    CALLS_VISIBLE_TO_ROOM_ADMINS = values.BooleanValue(
+        True, environ_name="CALLS_VISIBLE_TO_ROOM_ADMINS", environ_prefix=None
     )
 
     # External Applications

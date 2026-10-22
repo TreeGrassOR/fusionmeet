@@ -16,6 +16,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("core.urls")),
     path("", include("transcripts.urls")),
+    path("", include("calls.urls")),
     path("", include("lasuite.oidc_resource_server.urls")),
 ]
 
