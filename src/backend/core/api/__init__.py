@@ -80,6 +80,7 @@ def get_frontend_configuration(request):
         },
         "subtitle": {"enabled": settings.ROOM_SUBTITLE_ENABLED},
         "transcription": {"enabled": settings.TRANSCRIPTION_ENABLED},
+        "calls": {"enabled": settings.CALLS_HISTORY_ENABLED},
         "diagnostics": {"connection_test_enabled": settings.CONNECTION_TEST_ENABLED},
         "livekit": {
             "url": settings.LIVEKIT_CONFIGURATION["url"],

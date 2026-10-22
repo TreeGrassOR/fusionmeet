@@ -860,3 +860,127 @@ msgstr "Настройки расшифровки комнаты"
 #: transcripts/services.py:391
 msgid "Your transcript is ready"
 msgstr "Расшифровка готова"
+
+#: calls/apps.py:11 calls/models.py:56
+msgid "Calls"
+msgstr "Звонки"
+
+#: calls/models.py:32
+msgid "LiveKit room sid"
+msgstr "SID комнаты LiveKit"
+
+#: calls/models.py:33
+msgid "Set by the LiveKit webhooks, empty while only chat messages are known."
+msgstr "Заполняется вебхуками LiveKit. Пусто, пока известны только сообщения чата."
+
+#: calls/models.py:41 calls/models.py:226
+msgid "Title"
+msgstr "Название"
+
+#: calls/models.py:42
+msgid "Title of the room when the call started."
+msgstr "Название комнаты на момент начала звонка."
+
+#: calls/models.py:48
+msgid "Last activity at"
+msgstr "Последняя активность"
+
+#: calls/models.py:49
+msgid "Start of the call or time of its last chat message."
+msgstr "Начало звонка или время последнего сообщения в чате."
+
+#: calls/models.py:55 calls/models.py:92 calls/models.py:136 calls/models.py:187
+msgid "Call"
+msgstr "Звонок"
+
+#: calls/models.py:94
+msgid "LiveKit identity"
+msgstr "Идентификатор LiveKit"
+
+#: calls/models.py:101 calls/models.py:193
+msgid "User"
+msgstr "Пользователь"
+
+#: calls/models.py:104
+msgid "Display name"
+msgstr "Отображаемое имя"
+
+#: calls/models.py:106
+msgid "Guest"
+msgstr "Гость"
+
+#: calls/models.py:107
+msgid "Joined at"
+msgstr "Время входа"
+
+#: calls/models.py:108
+msgid "Last joined at"
+msgstr "Время последнего входа"
+
+#: calls/models.py:109
+msgid "Left at"
+msgstr "Время выхода"
+
+#: calls/models.py:114
+msgid "Call participant"
+msgstr "Участник звонка"
+
+#: calls/models.py:115
+msgid "Call participants"
+msgstr "Участники звонка"
+
+#: calls/models.py:140
+msgid "Client id"
+msgstr "ID на клиенте"
+
+#: calls/models.py:141
+msgid "Id of the LiveKit text stream, the same for every client."
+msgstr "ID текстового потока LiveKit, одинаковый у всех клиентов."
+
+#: calls/models.py:144
+msgid "Sender LiveKit identity"
+msgstr "Идентификатор LiveKit отправителя"
+
+#: calls/models.py:152
+msgid "Sender"
+msgstr "Отправитель"
+
+#: calls/models.py:155
+msgid "Sender name"
+msgstr "Имя отправителя"
+
+#: calls/models.py:157
+msgid "Text"
+msgstr "Текст"
+
+#: calls/models.py:158
+msgid "Sent at"
+msgstr "Время отправки"
+
+#: calls/models.py:163
+msgid "Chat message"
+msgstr "Сообщение чата"
+
+#: calls/models.py:164
+msgid "Chat messages"
+msgstr "Сообщения чата"
+
+#: calls/models.py:196
+msgid "Last read at"
+msgstr "Прочитано до"
+
+#: calls/models.py:201
+msgid "Call read state"
+msgstr "Отметка о прочтении звонка"
+
+#: calls/models.py:202
+msgid "Call read states"
+msgstr "Отметки о прочтении звонков"
+
+#: calls/models.py:250
+msgid "Room call title"
+msgstr "Название звонков комнаты"
+
+#: calls/models.py:251
+msgid "Room call titles"
+msgstr "Названия звонков комнат"
