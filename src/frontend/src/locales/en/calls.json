@@ -1,0 +1,150 @@
+{
+  "title": {
+    "namesAndMore": "{{names}} and {{count}} more",
+    "twoNames": "{{first}} and {{second}}",
+    "onDate": "Call on {{date}}"
+  },
+  "rail": {
+    "label": "Sections",
+    "home": "{{appTitle}}, home",
+    "calls": "Calls",
+    "recordings": "Recordings"
+  },
+  "list": {
+    "title": "Calls",
+    "newCall": "New call",
+    "search": "Search",
+    "searchLabel": "Search calls, participants and messages",
+    "clearSearch": "Clear search",
+    "label": "Calls",
+    "loading": "Loading calls…",
+    "error": "Could not load the calls.",
+    "retry": "Retry",
+    "empty": "Your calls will appear here, with their chat, transcript and recordings.",
+    "noResults": "Nothing found."
+  },
+  "item": {
+    "you": "You",
+    "someone": "Participant",
+    "active": "live",
+    "yesterday": "yesterday",
+    "participants_one": "{{count}} participant",
+    "participants_other": "{{count}} participants",
+    "unread_one": "{{count}} unread message",
+    "unread_other": "{{count}} unread messages",
+    "hasTranscript": "has a transcript",
+    "hasRecording": "has a recording",
+    "current": "open"
+  },
+  "home": {
+    "title": "{{appTitle}}: chats and video calls",
+    "newCall": "New call",
+    "newChat": "New chat",
+    "soon": "Soon",
+    "join": "Join a call",
+    "schedule": "Schedule in a calendar",
+    "scheduleShort": "Schedule",
+    "createError": "Could not create the call. Please try again.",
+    "invite": {
+      "title": "Invitation link to {{appTitle}}",
+      "body": "Send it to the person you want to talk to",
+      "short": "Invitation link",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "error": "Could not create the link. Please try again."
+    }
+  },
+  "schedule": {
+    "heading": "Schedule a call",
+    "name": "Title",
+    "defaultTitle": "Call in {{appTitle}}",
+    "date": "Date",
+    "time": "Time",
+    "duration": "Duration",
+    "submit": "Create the call",
+    "cancel": "Cancel",
+    "error": "Could not create the call. Please try again.",
+    "doneHeading": "Call scheduled",
+    "when": "{{day}}, {{start}}–{{end}}",
+    "description": "Call link: {{url}}",
+    "copy": "Copy link",
+    "copied": "Copied",
+    "titleNotSaved": "The call was created, but its title was not saved in the call history.",
+    "ics": "Download .ics",
+    "google": "Google Calendar",
+    "done": "Done"
+  },
+  "detail": {
+    "back": "Back to calls",
+    "active": "Live now",
+    "when": "{{day}}, {{start}}–{{end}} · {{duration}}",
+    "since": "{{day}}, started at {{start}}",
+    "participantsLabel": "Participants: {{names}}",
+    "rejoin": "Back to the call",
+    "tabsLabel": "Call sections",
+    "tabs": {
+      "chat": "Chat",
+      "transcript": "Transcript",
+      "recordings": "Recordings",
+      "participants": "Participants"
+    },
+    "error": "Could not load the call.",
+    "notFound": "This call does not exist or you cannot access it.",
+    "retry": "Retry"
+  },
+  "chat": {
+    "label": "Chat messages",
+    "you": "You",
+    "empty": "Nobody wrote in the chat of this call.",
+    "emptyActive": "Nobody wrote in the chat yet. New messages will appear here.",
+    "error": "Could not load the messages.",
+    "retry": "Retry"
+  },
+  "transcript": {
+    "none": "This call has no transcript.",
+    "choose": "Transcripts of the call",
+    "item": "Transcript {{time}}",
+    "pending": "The transcript is being prepared",
+    "pendingHint": "It will appear here once the transcription is stopped.",
+    "failed": "The transcript could not be saved.",
+    "notViewable": "The transcript is available to whoever started it and to the call organisers.",
+    "label": "Transcript phrases",
+    "search": "Search the transcript",
+    "clearSearch": "Clear search",
+    "matches": "Matches: {{count}}",
+    "noMatches": "Nothing found",
+    "download": "Download .txt",
+    "fileHeading": "Transcript of the call “{{title}}”",
+    "empty": "The transcript has no phrases.",
+    "error": "Could not load the transcript.",
+    "retry": "Retry"
+  },
+  "recordings": {
+    "none": "Nothing was recorded in this call.",
+    "video": "Video recording",
+    "audio": "Audio recording",
+    "startedAt": "Started at {{time}}",
+    "open": "Open",
+    "openVideo": "Open the video recording",
+    "openAudio": "Open the audio recording",
+    "status": {
+      "ready": "ready",
+      "inProgress": "recording",
+      "processing": "saving",
+      "failed": "recording failed"
+    }
+  },
+  "participants": {
+    "none": "No participants.",
+    "you": "you",
+    "guest": "guest",
+    "noName": "No name",
+    "range": "{{start}}–{{end}}",
+    "present": "in the call since {{start}}",
+    "since": "since {{start}}"
+  },
+  "login": {
+    "heading": "Log in required",
+    "body": "Log in to see your call history."
+  }
+}

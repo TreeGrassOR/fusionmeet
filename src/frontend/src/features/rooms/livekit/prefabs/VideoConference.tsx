@@ -33,6 +33,7 @@ import { RoomSilentMicDetector } from '@/features/rooms/components/SilentMicDete
 import { LowerHandOnSpeaking } from '@/features/rooms/livekit/components/LowerHandOnSpeaking'
 import { LobbyProvider } from '@/features/rooms/components/LobbyProvider'
 import { ParticipantAudioSynchronizer } from '@/features/participantAudio/components/ParticipantAudioSynchronizer'
+import { ChatPersistence } from '@/features/calls/components/ChatPersistence'
 
 /**
  * @public
@@ -123,6 +124,7 @@ export function VideoConference({ ...props }: VideoConferenceProps) {
       <LowerHandOnSpeaking />
       <MediaStateObserver />
       <ChatProvider />
+      <ChatPersistence />
       <LobbyProvider />
       <VideoResolutionSubscription />
       <div

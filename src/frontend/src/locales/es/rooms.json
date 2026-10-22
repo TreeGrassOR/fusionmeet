@@ -449,7 +449,7 @@
     "closeButton": "Ocultar {{content}}"
   },
   "chat": {
-    "disclaimer": "Los mensajes solo son visibles para los participantes en el momento de\nsu envío. Todos los mensajes se eliminan al final de la llamada.",
+    "disclaimer": "Los mensajes son visibles para los participantes presentes en la llamada. Se guardan en el historial de la llamada, visible para sus participantes.",
     "messagesLog": "Mensajes del chat"
   },
   "moreTools": {

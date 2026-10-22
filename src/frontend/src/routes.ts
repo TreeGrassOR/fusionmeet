@@ -18,6 +18,9 @@ const ConnectionTestRoute = lazy(
 const MyRecordingsRoute = lazy(
   () => import('@/features/transcription/routes/MyRecordings')
 )
+const CallDetailRoute = lazy(
+  () => import('@/features/calls/routes/CallDetailRoute')
+)
 
 const roomIdRegex = new RegExp(`^[/](?<roomId>${flexibleRoomIdPattern})$`)
 
@@ -30,7 +33,8 @@ export const routes: Record<
   | 'sdkCreateButton'
   | 'sdkSettingsPopup'
   | 'recordingDownload'
-  | 'myRecordings',
+  | 'myRecordings'
+  | 'call',
   {
     name: RouteName
     path: RegExp | string
@@ -86,6 +90,13 @@ export const routes: Record<
     name: 'myRecordings',
     path: '/my-recordings',
     Component: MyRecordingsRoute,
+  },
+  // A call of the history, shown in the logged-in home
+  call: {
+    name: 'call',
+    path: /^\/calls\/(?<callId>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
+    to: (callId: string) => `/calls/${callId.trim()}`,
+    Component: CallDetailRoute,
   },
 }
 
