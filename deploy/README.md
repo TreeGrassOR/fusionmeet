@@ -107,10 +107,10 @@ A-записи на `PUBLIC_IP`:
 
 | Имя | Тип | Значение | Для чего |
 |---|---|---|---|
-| `@` (`med-question.online`) | A | `94.29.40.2` | сайт (`MEET_HOST`) |
-| `www` | A | `94.29.40.2` | перенаправление на сайт (`MEET_REDIRECT_HOSTS`) |
-| `id` | A | `94.29.40.2` | Keycloak (`KEYCLOAK_HOST`) |
-| `livekit` | A | `94.29.40.2` | LiveKit (`LIVEKIT_HOST`) |
+| `@` (`med-question.online`) | A | `46.138.69.23` | сайт (`MEET_HOST`) |
+| `www` | A | `46.138.69.23` | перенаправление на сайт (`MEET_REDIRECT_HOSTS`) |
+| `id` | A | `46.138.69.23` | Keycloak (`KEYCLOAK_HOST`) |
+| `livekit` | A | `46.138.69.23` | LiveKit (`LIVEKIT_HOST`) |
 
 Одна запись `*` (wildcard) с тем же адресом заменяет `www`, `id` и `livekit`. Записи
 AAAA (IPv6) не нужны; если они есть, они должны вести на этот же сервер, иначе Let's
@@ -286,6 +286,7 @@ sudo docker compose -f deploy/compose.yaml exec asr python -c "import urllib.req
 | `sudo ./deploy/install.sh` | проверяет драйвер NVIDIA; ставит Docker и NVIDIA Container Toolkit, если их нет; проверяет, что контейнеры видят GPU и что порты свободны; показывает свободную видеопамять и какие модели распознавания поместятся на GPU; проверяет, хватит ли оперативной памяти моделям. Существующие контейнеры не трогает |
 | `sudo ./deploy/up.sh` | при первом запуске создаёт `deploy/.env` (секреты, `LAN_IP`, email для Let's Encrypt); собирает образы, запускает стек и ждёт healthcheck всех сервисов. Повторный запуск сохраняет `.env` и обновляет контейнеры |
 | `sudo ./deploy/up.sh --env-only` | только создать или дополнить `deploy/.env` |
+| `sudo ./deploy/public-ip.sh` | записывает текущий внешний IP в `PUBLIC_IP` и перезапускает LiveKit, если IP сменился (при `PUBLIC_IP_AUTO=true` это раз в 5 минут делает таймер `fusionmeet-public-ip.timer`) |
 | `sudo ./deploy/add-user.sh <логин> <email>` | создаёт пользователя и печатает временный пароль; для существующего пользователя задаёт новый временный пароль |
 
 Первый `up.sh` идёт долго: сборка четырёх образов, первая сборка Keycloak и
@@ -411,7 +412,14 @@ asr отключает эту проверку (`NVIDIA_DISABLE_REQUIRE=true` в
 
 ### Сменился внешний IP
 
-1. В `deploy/.env` поменяйте `PUBLIC_IP` и, если изменился, `LAN_IP`.
+С `PUBLIC_IP_AUTO=true` (по умолчанию) `up.sh` при каждом запуске, а таймер
+`fusionmeet-public-ip.timer` каждые 5 минут узнают текущий внешний IP, записывают
+его в `PUBLIC_IP` и перезапускают LiveKit (идущие звонки переподключаются сами).
+Журнал: `journalctl -u fusionmeet-public-ip`. Вручную: `sudo ./deploy/public-ip.sh`.
+Остаётся только A-записи:
+
+1. При `PUBLIC_IP_AUTO=false` поменяйте `PUBLIC_IP` в `deploy/.env` сами; `LAN_IP`
+   поменяйте, если изменился и он.
 2. Свой домен: у регистратора поменяйте A-записи на новый IP (раздел «Свой домен»).
    Имена sslip.io содержат сам IP: поменяйте `BASE_DOMAIN` (IP через дефисы, например
    `94-29-40-2.sslip.io`), если какое-то из `MEET_HOST`, `KEYCLOAK_HOST`,

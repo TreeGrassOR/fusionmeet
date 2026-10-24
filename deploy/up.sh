@@ -31,6 +31,8 @@ for arg in "$@"; do
     *) die "неизвестный параметр: $arg (см. --help)" ;;
   esac
 done
+# public-ip.sh (systemd timer) must not change deploy/.env or LiveKit meanwhile
+fm_lock 120 || die "deploy/.env сейчас меняет другой запуск up.sh или public-ip.sh: подождите и запустите снова"
 
 # Secrets generated when empty. The S3 key id uses Garage's own format
 # (GK + 24 hex digits); the RPC secret must be 32 bytes in hex.
@@ -67,14 +69,6 @@ detect_lan_ip() {
     ip=$(hostname -I 2>/dev/null | awk '{ print $1 }')
   fi
   printf '%s' "$ip"
-}
-
-valid_ipv4() {
-  [[ $1 =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
-  local octet
-  for octet in "${BASH_REMATCH[@]:1}"; do
-    ((10#$octet <= 255)) || return 1
-  done
 }
 
 valid_email() {
@@ -207,8 +201,23 @@ prepare_env() {
     ok "email для Let's Encrypt: $email"
   fi
 
-  local public_ip
+  local public_ip detected
   public_ip=$(env_get "$FM_ENV_FILE" PUBLIC_IP)
+  if [[ $(env_get "$FM_ENV_FILE" PUBLIC_IP_AUTO) == true ]]; then
+    if detected=$(fm_detect_public_ip); then
+      if [[ $detected != "$public_ip" ]]; then
+        env_set "$FM_ENV_FILE" PUBLIC_IP "$detected"
+        ok "PUBLIC_IP определён: $detected (было: ${public_ip:-не задан})"
+        public_ip=$detected
+      else
+        ok "PUBLIC_IP: $public_ip (совпадает с текущим внешним IP)"
+      fi
+    elif [[ -n $public_ip ]]; then
+      warn "не удалось узнать внешний IP (${FM_PUBLIC_IP_URLS[*]}): оставлен PUBLIC_IP=$public_ip"
+    else
+      die "не удалось узнать внешний IP сервера. Укажите PUBLIC_IP в $FM_ENV_FILE"
+    fi
+  fi
   [[ -n $(env_get "$FM_ENV_FILE" BASE_DOMAIN) ]] || die "BASE_DOMAIN пуст в $FM_ENV_FILE"
   valid_ipv4 "$public_ip" || die "PUBLIC_IP=$public_ip в $FM_ENV_FILE не похож на IPv4-адрес"
   fm_load_hosts "$FM_ENV_FILE"
@@ -311,6 +320,54 @@ tune_udp_buffers() {
     ok "UDP-буферы увеличены: net.core.rmem_max=${values[0]}, net.core.wmem_max=${values[1]} (сохранятся после перезагрузки: $SYSCTL_FILE)"
   else
     ok "net.core.rmem_max=${values[0]}, net.core.wmem_max=${values[1]} ($SYSCTL_FILE)"
+  fi
+}
+
+# public_ip_timer: with PUBLIC_IP_AUTO=true, public-ip.sh runs every 5 minutes
+# (systemd timer) and follows a new external IP; otherwise the timer is removed.
+PUBLIC_IP_UNIT=fusionmeet-public-ip
+public_ip_timer() {
+  step "Слежение за внешним IP"
+  local unit=/etc/systemd/system/$PUBLIC_IP_UNIT
+  if ! command -v systemctl >/dev/null 2>&1; then
+    warn "нет systemd: внешний IP не отслеживается, при его смене запустите sudo $FM_DEPLOY_DIR/public-ip.sh"
+    return 0
+  fi
+  if [[ $(env_get "$FM_ENV_FILE" PUBLIC_IP_AUTO) != true ]]; then
+    if [[ -f $unit.timer ]]; then
+      systemctl disable --now "$PUBLIC_IP_UNIT.timer" >/dev/null 2>&1 || true
+      rm -f "$unit.timer" "$unit.service"
+      systemctl daemon-reload
+    fi
+    ok "выключено (PUBLIC_IP_AUTO не true): PUBLIC_IP меняется только вручную"
+    return 0
+  fi
+  cat >"$unit.service" <<UNIT
+[Unit]
+Description=FusionMeet: follow a new external IP (PUBLIC_IP, LiveKit)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$FM_DEPLOY_DIR/public-ip.sh
+UNIT
+  cat >"$unit.timer" <<UNIT
+[Unit]
+Description=FusionMeet: check the external IP every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl daemon-reload
+  if systemctl enable --now "$PUBLIC_IP_UNIT.timer" >/dev/null 2>&1; then
+    ok "внешний IP проверяется каждые 5 минут ($PUBLIC_IP_UNIT.timer, журнал: journalctl -u $PUBLIC_IP_UNIT)"
+  else
+    warn "не удалось включить $PUBLIC_IP_UNIT.timer: при смене IP запустите sudo $FM_DEPLOY_DIR/public-ip.sh"
   fi
 }
 
@@ -450,6 +507,8 @@ if [[ $HN_MODE == nginx ]]; then
   step "HTTPS через nginx сервера"
   hn_after_up "$FM_MEET_HOST $FM_KEYCLOAK_HOST $FM_LIVEKIT_HOST" "${FM_HOSTS[@]}"
 fi
+
+public_ip_timer
 
 fm_compose ps
 print_summary

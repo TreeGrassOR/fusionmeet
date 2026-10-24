@@ -124,6 +124,45 @@ fm_compose() {
   docker compose -f "$FM_COMPOSE_FILE" --env-file "$FM_ENV_FILE" "$@"
 }
 
+valid_ipv4() {
+  [[ $1 =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  local octet
+  for octet in "${BASH_REMATCH[@]:1}"; do
+    ((10#$octet <= 255)) || return 1
+  done
+}
+
+# Services that answer with the IPv4 address the request came from
+FM_PUBLIC_IP_URLS=(https://api.ipify.org https://ipv4.icanhazip.com https://ifconfig.me/ip)
+
+# fm_detect_public_ip: prints the current external IPv4 address of the server.
+# At least two services must give the same address, so that one wrong or
+# unreachable service never makes LiveKit restart with a wrong IP.
+fm_detect_public_ip() {
+  command -v curl >/dev/null 2>&1 || return 1
+  local url ip answers=()
+  for url in "${FM_PUBLIC_IP_URLS[@]}"; do
+    ip=$(curl -4 -fsS --max-time 5 "$url" 2>/dev/null | tr -d '[:space:]') || continue
+    valid_ipv4 "$ip" && answers+=("$ip")
+  done
+  ((${#answers[@]} > 0)) || return 1
+  ip=$(printf '%s\n' "${answers[@]}" | sort | uniq -c | sort -rn |
+    awk 'NR == 1 && $1 >= 2 { print $2 }')
+  [[ -n $ip ]] || return 1
+  printf '%s' "$ip"
+}
+
+# fm_lock WAIT: takes the lock shared by up.sh and public-ip.sh, so that they
+# never edit deploy/.env or restart services at the same time. WAIT is the number
+# of seconds to wait for it (0: fail at once). Without flock there is no lock.
+FM_LOCK_FILE=/run/lock/fusionmeet-deploy.lock
+fm_lock() {
+  command -v flock >/dev/null 2>&1 || return 0
+  [[ -d ${FM_LOCK_FILE%/*} ]] || FM_LOCK_FILE=$FM_DEPLOY_DIR/.deploy.lock
+  exec 9>"$FM_LOCK_FILE"
+  if (($1 > 0)); then flock -w "$1" 9; else flock -n 9; fi
+}
+
 # require_docker: Docker and the compose plugin are installed and reachable.
 require_docker() {
   command -v docker >/dev/null 2>&1 ||
